@@ -949,8 +949,11 @@ async function readXlsx(buf){
   if(rels)[...rels.getElementsByTagName('Relationship')].forEach(r=>{target[r.getAttribute('Id')]=r.getAttribute('Target');});
   let sheets=wb?[...wb.getElementsByTagName('sheet')].map(sh=>{const id=sh.getAttribute('r:id')||sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');let t=target[id]||'';t=t.replace(/^\/?(xl\/)?/,'xl/');return {name:sh.getAttribute('name'),path:t};}):[];
   if(!sheets.length)sheets=Object.keys(zip.files).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort().map((path,i)=>({name:'Sheet '+(i+1),path}));
+  // a curriculum area map kept as a spreadsheet: read its grid, never its listing
+  const docs=[];for(const sh of sheets){const doc=await xml(sh.path);if(doc)docs.push({name:sh.name,doc});}
+  const cam=camXlsx(docs.map(d=>({name:d.name,rows:camSheetRows(d.doc,strings)})));if(cam)return {segs:cam.segs,pages:cam.map.sheets.length,map:cam.map};
   const segs=[];let nSheets=0;const per=[];
-  for(const sh of sheets){const doc=await xml(sh.path);if(!doc)continue;
+  for(const {name,doc} of docs){const sh={name};
     const rows=[...doc.getElementsByTagName('row')].map(r=>[...r.getElementsByTagName('c')].map(c=>{const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0];
       if(t==='s')return v?strings[+v.textContent]||'':'';if(t==='inlineStr'){const is=c.getElementsByTagName('is')[0];return is?tx(is):'';}if(t==='b')return '';
       const val=v?v.textContent:'';return /^-?\d+(\.\d+)?(E-?\d+)?$/i.test(val)&&!/^\d{1,3}$/.test(val)?'':val;}).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean));
@@ -1011,7 +1014,7 @@ async function readFile(file){
       r.per.forEach(p=>{const w=p.segs.join(' ').split(/\s+/).filter(Boolean).length;if(w<15)return;out.push({name:base+' › '+p.name,kind:'Excel',segs:p.segs,pages:1,words:w});});
       if(out.length)return out;}}
   const words=r.segs.join(' ').split(/\s+/).filter(Boolean).length;
-  if(r.map)return [{name:file.name,kind:'Curriculum area map',segs:r.segs,pages:r.pages,words,map:r.map}];
+  if(r.map)return [{name:file.name,kind:'Curriculum area map',segs:r.segs,pages:r.pages,words:words||1,map:r.map}];
   // A curriculum area map that isn't a Word file: its ticks can't be read, and its header codes must not count as coverage
   const all=r.segs.join(' ');if(/curriculum area map|map\s+[–-]\s+(template|example)/i.test(all)&&/teaching and learning unit/i.test(all)&&/AS no\./i.test(all)){
     toast(file.name+' looks like a curriculum area map. Its ticks can only be read from the Word (.docx) version, so its listed codes are ignored.');
@@ -1091,7 +1094,7 @@ function analyse(){
     const K=kwScore(cd,E);const kwS=SUBJ.kwOnly?K.score:K.score*CFG.kwBlend;const kwLed=kwS>score;if(kwLed)score=kwS;
     let school=null,schoolLift=false;const terms=wordsFor(cd.code);
     if(terms.length){const re=wordRe(terms);const ev=[];let n=0;E.forEach(i=>files[i].segs.forEach((sg,si)=>{if(re.test(sg)){n++;if(ev.length<3)ev.push({f:i,i:si,w:1});}}));school={terms,n,ev,re};const sc=n>=2?1:n?0.5:0;if(sc>score){schoolLift=statusOf(sc,false)!==statusOf(score,false);score=sc;}}
-    const isMapped=(mapped[cd.code]||[]).filter(m=>E0.includes(m.fi));const hasPlans=E.length>0,hasMap=E0.some(i=>files[i].map);
+    const isMapped=mapped[cd.code]||[];const hasPlans=E.length>0,hasMap=files.some(f=>f.map&&(!f.map.codes||!f.map.codes.length||f.map.codes.includes(cd.code)));
     // the check a map is for: does each tick show up in the plans, and is everything taught ticked?
     const mapFlag=isMapped.length&&hasPlans&&!isListed&&score<CFG.partAt?'notInPlans':!isMapped.length&&hasMap&&hasPlans&&(isListed||score>=CFG.partAt)?'notOnMap':null;
     const auto=statusOf(score,isListed||isMapped.length>0);const ov=S.overrides[cd.code];
@@ -1273,11 +1276,12 @@ function mapCard(){const maps=S.files.filter(f=>f.map),mt=S.files.filter(f=>f.ma
   const notIn=R.rows.filter(r=>r.mapFlag==='notInPlans'),notOn=R.rows.filter(r=>r.mapFlag==='notOnMap');const blank=R.rows.filter(r=>!r.mapped);
   const li=rs=>rs.map(r=>`<div class="small" style="margin-top:3px"><span class="code">${r.cd.code}</span> ${esc(r.cd.description)}</div>`).join('');
   return `<div class="card"><h2>Curriculum area map check</h2>${mtw}
-   <p class="small muted">${maps.map(f=>esc(f.name)).join(', ')}: ${units} teaching and learning unit${units===1?'':'s'}, ${ticked} of ${R.rows.length} content descriptions ticked. Only ticks count: the content descriptions listed across the top of the map are not coverage.</p>
+   <p class="small muted">${maps.map(f=>esc(f.name)+(f.map.sheets&&f.map.sheets.length>1?' ('+f.map.sheets.length+' tabs)':'')).join(', ')}: ${units} teaching and learning unit${units===1?'':'s'}, ${ticked} of ${R.rows.length} content descriptions ticked. Only ticks count: the content descriptions listed across the top of the map are not coverage.</p>
    ${plans?`<div class="row"><div><h3>On the map, not evident in the plans (${notIn.length})</h3>${li(notIn)||'<div class="small muted">None. Every tick has evidence in the plans.</div>'}</div>
      <div><h3>Evident in the plans, not ticked on the map (${notOn.length})</h3>${li(notOn)||'<div class="small muted">None.</div>'}</div></div>`
    :`<div class="warn">Only the map was uploaded, so coverage here is what the map says. Add the unit plans too, and the audit checks each tick against them.</div>${blank.length?`<h3>Not ticked for any unit (${blank.length})</h3>${li(blank)}`:''}`}
-   ${maps.some(f=>f.map.as.length)?`<p class="small muted" style="margin-top:8px">The map’s achievement standard Y/N boxes are shown beside each statement on the Insights tab.</p>`:''}</div>`;}
+   ${(()=>{const q=maps.flatMap(f=>(f.map.queries||[]).filter(x=>R.rows.some(r=>r.cd.code===x.code)));return q.length?`<h3>Marked without a number (${q.length}): not counted</h3><p class="small muted">These cells have something other than an AS number in them, so they aren’t counted as coverage. Check them with the team.</p>${q.map(x=>`<div class="small" style="margin-top:3px"><span class="code">${x.code}</span> “${esc(x.v)}” for <b>${esc(x.unit)}</b>${x.sheet?` <span class="muted">(${esc(x.sheet)})</span>`:''}</div>`).join('')}`:'';})()}
+   ${maps.some(f=>f.map.as.length)?`<p class="small muted" style="margin-top:8px">The achievement standard sentences the map marks are shown beside each statement on the Insights tab.</p>`:''}</div>`;}
 function levelCard(){if(S.levels.length<2)return '';const rows=byLevelRows();
   return `<div class="card"><h2>Coverage by level</h2><p class="small muted">Content descriptions covered at each level, overall and by strand.</p><div style="overflow:auto"><table><tr><th>Level</th><th style="min-width:160px">Overall</th><th class="right">Covered</th>${SUBJ.strands.map(st=>`<th class="right">${st}</th>`).join('')}</tr>
    ${rows.map(x=>`<tr><td><b>${LVNAME(x.l)}</b></td><td>${bar(x.c,x.rs.length)}</td><td class="right">${x.c.cov}/${x.rs.length} <span class="small muted">(${Math.round(100*x.c.cov/(x.rs.length||1))}%)</span></td>${x.st.map(y=>`<td class="right small">${y.n?`<span class="${y.cov===y.n?'':y.cov===0?'tag s-none':''}">${y.cov}/${y.n}</span>`:'–'}</td>`).join('')}</tr>`).join('')}</table></div></div>`;}
@@ -1481,7 +1485,7 @@ function vHelp(){return `<div class="card help"><h2>How to use the Curriculum Au
  <h3>1. Set up</h3><ol><li>Name the sequence, then choose whether the upload is <b>one unit or term</b> or <b>a whole year</b>. A unit is expected to have gaps; a year plan should cover everything.</li>
  <li>Choose the subject (top right: English, Mathematics, or another learning area from the list), then the curriculum level. Science, HASS, Technologies, HPE and The Arts are set out in bands (e.g. Levels 3 and 4); a file for Level 3 counts for the Levels 3 and 4 band. Pick several for a composite class or a group of levels, or use <b>Quick select</b> for a whole school (Foundation–Level 6, Levels 7–10, or every level). A whole-school audit shows coverage by level and groups the gaps by level. If your file lists VC2 codes, the level is chosen for you.</li>
  <li>Drag in your Word, PDF, PowerPoint or Excel files, or a whole folder of them (lesson planners, unit overviews, term plans, yearly overview spreadsheets). In Excel, every worksheet is read, one row at a time; a sheet named for a level (e.g. “Level 4”) helps the tool place the file. Add several to audit a term or a year together.</li></ol>
- <h3>Curriculum area maps</h3><ul><li>Upload a VCAA <b>curriculum area map</b> (the Word file) as it is. The tool reads which content descriptions each teaching and learning unit is ticked against, and the AS numbers beside them. Ticks can be Word check boxes, the ü tick in VCAA’s examples, or a typed x or Y; an AS number on its own also counts.</li><li><b>Only ticks count.</b> The content descriptions listed across the top of the map, and the achievement standard sentences, are never counted as coverage. A blank template audits as nothing covered.</li><li>Upload the unit plans with the map and the <b>Curriculum area map check</b> lists content descriptions ticked on the map but not evident in the plans, and content evident in the plans but not ticked. The map’s achievement standard Y/N boxes appear beside each statement on Insights.</li><li>A map saved as a PDF can’t be read reliably (its ticks are lost), so it is left out with a message. Use the Word version.</li></ul>
+ <h3>Curriculum area maps</h3><ul><li>Upload a VCAA <b>curriculum area map</b> (the Word file) as it is. The tool reads which content descriptions each teaching and learning unit is ticked against, and the AS numbers beside them. Ticks can be Word check boxes, the ü tick in VCAA’s examples, or a typed x or Y; an AS number on its own also counts.</li><li>A school’s map kept in <b>Excel</b> (codes across the top, units down the side, a tab per level) works too. There, only a cell with an AS number counts (5, 15,16, 7-8 or 14b). A cell with “?” or anything else without a number isn’t counted; it is listed for checking.</li><li><b>Only ticks count.</b> The unit names, the content descriptions and codes listed across the top of the map, and the achievement standard sentences, are never counted as coverage. A blank template audits as nothing covered.</li><li>Upload the unit plans with the map and the <b>Curriculum area map check</b> lists content descriptions ticked on the map but not evident in the plans, and content evident in the plans but not ticked. The map’s achievement standard Y/N boxes appear beside each statement on Insights.</li><li>A map saved as a PDF can’t be read reliably (its ticks are lost), so it is left out with a message. Use the Word version.</li></ul>
  <h3>2. Read the summary</h3><ul><li>The tiles show how many content descriptions are covered, partly covered or not evident.</li><li>The strand table shows where coverage is thin.</li><li>The gap list groups missing content descriptions by sub-strand, with what to look for in a sequence that covers them.</li><li>With several files, <b>Which file covers what</b> shows each file’s contribution.</li></ul>
  <h3>3. Check and adjust</h3><ul><li>On <b>Content descriptions</b>, open <b>Show evidence</b> to see the lines in your document that matched.</li><li>Change any status with the drop-down: for example, ${SUBJ.key==='maths'?'number fact fluency taught in a separate daily block':'spelling taught in a separate block'} that isn’t in this document. Add a note to explain.</li><li><b>Not planned for this sequence</b> marks content you deliberately teach elsewhere, so it isn’t counted as a gap.</li>
  <li><b>Confidence</b> sits under each status in plain words: <i>strong evidence</i> (named in a learning intention, success criteria or assessment), <i>good evidence</i>, <i>passing mention only</i> (found only in vocabulary or materials lists), and so on. Filter by confidence to check the weakest first.</li>
@@ -1556,7 +1560,7 @@ function camReadMap(G,unitRow,out){
   // code columns from the header rows above the unit label row (a code cell may also carry the description)
   const cols=[];for(let i=0;i<unitRow;i++)G[i].forEach(c=>{const m=c.t.match(CAM_CODE);if(m)m.forEach(code=>{if(!cols.some(x=>x.code===code&&x.g===c.g))cols.push({code,g:c.g,span:c.span});});});
   if(!cols.length)return;
-  out.header+=cols.length;
+  out.header+=cols.length;cols.forEach(c=>out.codes.push(c.code));
   for(let i=unitRow+1;i<G.length;i++){const r=G[i];if(!r.length)continue;
     const first=r[0];if(/^comments?/i.test(first.t)||/comments, notes/i.test(r.map(c=>c.t).join(' '))){const txt=r.slice(1).map(c=>c.t).join(' ').trim();if(txt)out.comments.push(txt);continue;}
     const unitCells=r.filter(c=>c.g<cols[0].g);let name=(unitCells[0]||{}).t||'';const sem=(unitCells[1]||{}).t||'';
@@ -1577,7 +1581,7 @@ function camReadAs(G,out){
 function camParse(body,ptext){
   const tbls=[...body.getElementsByTagNameNS(MAP_W,'tbl')].filter(t=>!t.parentNode.closest||!t.parentNode.closest('tbl'));
   const grids=tbls.map(camGrid);if(!grids.some(G=>camIsMapTable(G)>=0))return null;
-  const out={units:[],as:[],comments:[],header:0};const skip=new Set();
+  const out={units:[],as:[],comments:[],header:0,codes:[]};const skip=new Set();
   grids.forEach((G,i)=>{const u=camIsMapTable(G);if(u>=0){camReadMap(G,u,out);skip.add(tbls[i]);}else if(camIsAsTable(G)){camReadAs(G,out);skip.add(tbls[i]);}});
   // merge rows for the same unit across strand tables
   const units=[];out.units.forEach(u=>{const k=u.name.toLowerCase();let x=units.find(v=>v.name.toLowerCase()===k);if(!x)units.push(x={name:u.name,sem:u.sem,ticks:[]});u.ticks.forEach(t=>{const y=x.ticks.find(z=>z.code===t.code);if(y)t.as.forEach(n=>{if(!y.as.includes(n))y.as.push(n);});else x.ticks.push({code:t.code,as:t.as.slice()});});});
@@ -1594,7 +1598,47 @@ function camParse(body,ptext){
   out.comments.forEach(c=>chunk(c).forEach(x=>segs.push(x)));
   // strip codes from kept text: a map's codes count only through its ticks
   const clean=segs.map(s=>s.replace(CAM_CODE,'').replace(/\s{2,}/g,' ').trim()).filter(Boolean);
-  return {segs:clean,map:{units,as:Object.values(asBy).sort((a,b)=>a.n-b.n),header:out.header,ticked:new Set(units.flatMap(u=>u.ticks.map(t=>t.code))).size}};
+  return {segs:clean,map:{units,as:Object.values(asBy).sort((a,b)=>a.n-b.n),header:out.header,codes:[...new Set(out.codes)],queries:[],ticked:new Set(units.flatMap(u=>u.ticks.map(t=>t.code))).size}};
+}
+
+// ---------- Curriculum area maps kept as spreadsheets (a tab per level) ----------
+// Layout: a row of VC2 codes across the top (with strand, sub-strand and descriptor rows above it), units down the first
+// column, semester/term in the next, and an AS number (or several) in a cell where a unit addresses that content description.
+// A key of numbered achievement standard sentences sits below. Only cells with a number count; "?" etc. are listed for checking.
+function camColIdx(ref){const m=/^([A-Z]+)/.exec(ref||'');if(!m)return -1;let n=0;for(const ch of m[1])n=n*26+ch.charCodeAt(0)-64;return n-1;}
+function camSheetRows(doc,strings){const tx=el=>[...el.getElementsByTagName('t')].map(t=>t.textContent).join('');const rows=[];
+  [...doc.getElementsByTagName('row')].forEach(r=>{const ri=(+r.getAttribute('r')||rows.length+1)-1;const row={};
+    [...r.getElementsByTagName('c')].forEach((c,k)=>{const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0];let s='';
+      if(t==='s')s=v?strings[+v.textContent]||'':'';else if(t==='inlineStr'){const is=c.getElementsByTagName('is')[0];s=is?tx(is):'';}else if(t==='b')s='';else s=v?v.textContent:'';
+      s=String(s).replace(/\s+/g,' ').trim();if(/^\d+\.0+$/.test(s))s=s.replace(/\.0+$/,'');
+      const ci=c.getAttribute('r')?camColIdx(c.getAttribute('r')):k;if(s)row[ci]=s;});
+    rows[ri]=row;});
+  return rows;}
+const CAM_FULL=/^VC2[A-Z]{1,4}(?:F|10A|\d{1,2})[A-Z]{1,3}\d{2}$/;
+// AS numbers in a cell: "5", "15,16", "19, 20", "7-8", "14b"; anything without a digit ("?", "No AS?") is not a tick
+function camNums(s){if(!/\d/.test(s))return null;const out=[];String(s).replace(/(\d{1,2})\s*[-–]\s*(\d{1,2})|\d{1,2}/g,(m,a,b)=>{if(a){for(let i=+a;i<=+b&&i-a<20;i++)out.push(i);}else out.push(+m);return m;});return out.length?[...new Set(out)]:null;}
+function camXlsx(sheets){
+  const out={units:[],as:[],queries:[],header:0,sheets:[],codes:[]};
+  sheets.forEach(({name,rows})=>{
+    const cr=rows.findIndex(r=>r&&Object.values(r).filter(v=>CAM_FULL.test(v)).length>=3);if(cr<0)return;
+    const cols=Object.entries(rows[cr]).filter(([,v])=>CAM_FULL.test(v)).map(([c,v])=>({c:+c,code:v}));const first=Math.min(...cols.map(x=>x.c));
+    out.header+=cols.length;out.sheets.push(name);cols.forEach(c=>out.codes.push(c.code));const used=new Set();let end=rows.length;
+    for(let i=cr+1;i<rows.length;i++){const r=rows[i];if(!r)continue;const a=(r[0]||'').trim();
+      // the achievement standard key ends the grid
+      if(/^achievement (standard|strands)|^key\b/i.test(a)){end=i;break;}
+      const lab=Object.entries(r).filter(([c])=>+c<first).map(([,v])=>v);const unit=lab[0]||'',sem=lab[1]||'';
+      const ticks=[];cols.forEach(col=>{const v=r[col.c];if(v==null||v==='')return;const n=camNums(v);
+        if(n){ticks.push({code:col.code,as:n});n.forEach(x=>used.add(x));}
+        else out.queries.push({sheet:name,unit:unit||'(unit not named)',code:col.code,v});});
+      if(!unit&&!ticks.length)continue;
+      out.units.push({name:(sheets.length>1?name+': ':'')+(unit||'(unit not named)'),sem,ticks});}
+    // key: a number in the first column and the sentence beside it
+    for(let i=end;i<rows.length;i++){const r=rows[i];if(!r)continue;const n=(r[0]||'').match(/^(\d{1,2})$/);const t=Object.entries(r).filter(([c])=>+c>0).map(([,v])=>v).sort((x,y)=>y.length-x.length)[0];
+      if(n&&t&&t.length>15)out.as.push({n:+n[1],t,v:used.has(+n[1])?'Y':'',sheet:name});}
+  });
+  if(!out.sheets.length)return null;
+  const segs=out.units.map(u=>'Teaching and learning unit: '+u.name+(u.sem?' ('+u.sem+')':''));
+  return {segs,map:{units:out.units,as:out.as,queries:out.queries,header:out.header,sheets:out.sheets,codes:[...new Set(out.codes)],ticked:new Set(out.units.flatMap(u=>u.ticks.map(t=>t.code))).size}};
 }
 
 // ===================== Key terms from VCAA wording and elaborations =====================
@@ -1809,7 +1853,7 @@ function vInsights(){
   const sym={strong:['c','●','clear evidence'],some:['p','◐','some evidence'],none:['n','✕','no evidence'],nofile:['x','?','no files for this level']};
   // achievement standards
   const asCard=`<div class="card"><h2>Achievement standards</h2><p class="small muted">Teachers report against the achievement standards. Each statement is linked to the content descriptions that build it, and takes its status from them.</p>${I.as.length?`<div class="tiles"><div class="tile cov"><div class="big">${I.as.filter(a=>a.status==='cov').length}<span style="font-size:16px"> / ${I.as.length}</span></div><div class="lab">statements with all linked content covered</div></div><div class="tile part"><div class="big">${I.as.filter(a=>a.status==='part').length}</div><div class="lab">partly</div></div><div class="tile none"><div class="big">${I.as.filter(a=>a.status==='none').length}</div><div class="lab">not evident</div></div></div>
-    <details ${I.as.length<=30?'open':''}><summary>Show every statement</summary><table><tr><th>Level</th><th>Strand</th><th>Achievement standard statement</th><th>Linked content</th><th>Status</th>${I.as.some(a=>a.map)?'<th>Map Y/N</th>':''}</tr>${I.as.map(a=>`<tr><td class="small">${LVNAME(a.l)}</td><td class="small">${a.st.strand}</td><td>${esc(a.st.text)}</td><td class="small">${a.loose?'<span class="muted">'+a.loose+'</span>':a.rows.map(r=>`<span class="code" title="${esc(STATUS[r.status])}" style="color:var(--${r.status==='cov'?'cov':r.status==='part'?'part':r.status==='na'?'na':'none'})">${r.cd.code}</span>`).join(' ')}</td><td>${tag(a.status)}</td>${I.as.some(x=>x.map)?`<td class="small">${a.map?`<b>${a.map.v||'blank'}</b> <span class="muted">(sentence ${a.map.n})</span>${a.map.v==='Y'&&a.status==='none'?'<div class="mapflag">⚠ Y on the map, not evident</div>':a.map.v!=='Y'&&a.status==='cov'?'<div class="mapflag">⚠ covered, not marked Y</div>':''}`:'<span class="muted">–</span>'}</td>`:''}</tr>`).join('')}</table></details>`:''}
+    <details ${I.as.length<=30?'open':''}><summary>Show every statement</summary><table><tr><th>Level</th><th>Strand</th><th>Achievement standard statement</th><th>Linked content</th><th>Status</th>${I.as.some(a=>a.map)?'<th>Map Y/N</th>':''}</tr>${I.as.map(a=>`<tr><td class="small">${LVNAME(a.l)}</td><td class="small">${a.st.strand}</td><td>${esc(a.st.text)}</td><td class="small">${a.loose?'<span class="muted">'+a.loose+'</span>':a.rows.map(r=>`<span class="code" title="${esc(STATUS[r.status])}" style="color:var(--${r.status==='cov'?'cov':r.status==='part'?'part':r.status==='na'?'na':'none'})">${r.cd.code}</span>`).join(' ')}</td><td>${tag(a.status)}</td>${I.as.some(x=>x.map)?`<td class="small">${a.map?`<b>${a.map.v||'not marked'}</b> <span class="muted">(sentence ${a.map.n})</span>${a.map.v==='Y'&&a.status==='none'?'<div class="mapflag">⚠ Y on the map, not evident</div>':a.map.v!=='Y'&&a.status==='cov'?'<div class="mapflag">⚠ covered, not marked Y</div>':''}`:'<span class="muted">–</span>'}</td>`:''}</tr>`).join('')}</table></details>`:''}
     <p class="small muted">Each statement is linked to the content descriptions VCAA connects it to in its achievement standard extracts. A statement is covered when all its linked content descriptions are.</p></div>`;
   // progression
   let progCard='';
