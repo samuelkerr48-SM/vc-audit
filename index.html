@@ -1619,22 +1619,35 @@ const CAM_FULL=/^VC2[A-Z]{1,4}(?:F|10A|\d{1,2})[A-Z]{1,3}\d{2}$/;
 function camNums(s){if(!/\d/.test(s))return null;const out=[];String(s).replace(/(\d{1,2})\s*[-–]\s*(\d{1,2})|\d{1,2}/g,(m,a,b)=>{if(a){for(let i=+a;i<=+b&&i-a<20;i++)out.push(i);}else out.push(+m);return m;});return out.length?[...new Set(out)]:null;}
 function camXlsx(sheets){
   const out={units:[],as:[],queries:[],header:0,sheets:[],codes:[]};
+  // a code is either a whole cell (MEC style) or the end of a content description cell (VCAA template: "description\n VC2MFN01")
+  const codeIn=v=>{const m=String(v).match(CAM_CODE);return m&&m.length===1?m[0]:null;};
+  const HEAD=/^(unit( title)?|teaching and learning unit|semester( \/ term)?|term|year|strand|sub-?strand|content description|curriculum descriptor|code)\b/i;
   sheets.forEach(({name,rows})=>{
-    const cr=rows.findIndex(r=>r&&Object.values(r).filter(v=>CAM_FULL.test(v)).length>=3);if(cr<0)return;
-    const cols=Object.entries(rows[cr]).filter(([,v])=>CAM_FULL.test(v)).map(([c,v])=>({c:+c,code:v}));const first=Math.min(...cols.map(x=>x.c));
+    const cr=rows.findIndex(r=>r&&Object.values(r).filter(codeIn).length>=3);if(cr<0)return;
+    const cols=Object.entries(rows[cr]).filter(([,v])=>codeIn(v)).map(([c,v])=>({c:+c,code:codeIn(v)}));const first=Math.min(...cols.map(x=>x.c));
     out.header+=cols.length;out.sheets.push(name);cols.forEach(c=>out.codes.push(c.code));const used=new Set();let end=rows.length;
-    for(let i=cr+1;i<rows.length;i++){const r=rows[i];if(!r)continue;const a=(r[0]||'').trim();
+    // which left-hand columns hold the unit and the semester/term (from a header such as "Unit Title" | "Semester")
+    let uCol=-1,sCol=-1;for(let i=0;i<Math.min(rows.length,cr+4);i++){const r=rows[i];if(!r)continue;Object.entries(r).forEach(([c,v])=>{if(+c>=first)return;
+      if(uCol<0&&/^(unit|teaching and learning unit)/i.test(v))uCol=+c;if(sCol<0&&/^(semester|term)/i.test(v))sCol=+c;});}
+    for(let i=cr+1;i<rows.length;i++){const r=rows[i];if(!r)continue;
+      const left=Object.entries(r).filter(([c])=>+c<first).sort((x,y)=>x[0]-y[0]);
       // the achievement standard key ends the grid
-      if(/^achievement (standard|strands)|^key\b/i.test(a)){end=i;break;}
-      const lab=Object.entries(r).filter(([c])=>+c<first).map(([,v])=>v);const unit=lab[0]||'',sem=lab[1]||'';
-      const ticks=[];cols.forEach(col=>{const v=r[col.c];if(v==null||v==='')return;const n=camNums(v);
+      if(left.some(([,v])=>/^achievement (standard|strands)|^key\b/i.test(v))){end=i;break;}
+      let unit,sem;if(uCol>=0){unit=r[uCol]||'';sem=sCol>=0?r[sCol]||'':'';}
+      else{const lab=left.map(([,v])=>v).filter(v=>!/^\d+$/.test(v));unit=lab[0]||'';sem=lab[1]||'';}
+      if(HEAD.test(unit))continue;                 // a header row such as "Unit Title | Semester"
+      const sample=/^sample$/i.test(unit.trim());  // the template's example row is not a unit
+      const ticks=[];cols.forEach(col=>{const v=r[col.c];if(v==null||v===''||sample)return;
+        if(/^not covered$/i.test(v.trim()))return;   // an explicit "Not covered" from the template's list
+        const n=camNums(v);
         if(n){ticks.push({code:col.code,as:n});n.forEach(x=>used.add(x));}
         else out.queries.push({sheet:name,unit:unit||'(unit not named)',code:col.code,v});});
-      if(!unit&&!ticks.length)continue;
-      out.units.push({name:(sheets.length>1?name+': ':'')+(unit||'(unit not named)'),sem,ticks});}
-    // key: a number in the first column and the sentence beside it
-    for(let i=end;i<rows.length;i++){const r=rows[i];if(!r)continue;const n=(r[0]||'').match(/^(\d{1,2})$/);const t=Object.entries(r).filter(([c])=>+c>0).map(([,v])=>v).sort((x,y)=>y.length-x.length)[0];
-      if(n&&t&&t.length>15)out.as.push({n:+n[1],t,v:used.has(+n[1])?'Y':'',sheet:name});}
+      if(sample||(!unit&&!ticks.length))continue;
+      out.units.push({name:(sheets.length>1?name+': ':'')+(unit||'(unit not named)'),sem:/^\d$/.test(sem)?'Semester '+sem:sem,ticks});}
+    // key: a cell holding just a number with the sentence to its right (MEC: A|B, VCAA template: strand D | number E | sentence F)
+    for(let i=end;i<rows.length;i++){const r=rows[i];if(!r)continue;const e=Object.entries(r).map(([c,v])=>[+c,v]).sort((x,y)=>x[0]-y[0]);
+      const k=e.findIndex(([,v])=>/^\d{1,2}$/.test(v));if(k<0)continue;const t=e.slice(k+1).map(([,v])=>v).sort((x,y)=>y.length-x.length)[0];
+      const n=+e[k][1];if(t&&t.length>15)out.as.push({n,t,v:used.has(n)?'Y':'',sheet:name});}
   });
   if(!out.sheets.length)return null;
   const segs=out.units.map(u=>'Teaching and learning unit: '+u.name+(u.sem?' ('+u.sem+')':''));
