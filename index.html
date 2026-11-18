@@ -951,15 +951,20 @@ async function readXlsx(buf){
   if(!sheets.length)sheets=Object.keys(zip.files).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort().map((path,i)=>({name:'Sheet '+(i+1),path}));
   // a curriculum area map kept as a spreadsheet: read its grid, never its listing
   const docs=[];for(const sh of sheets){const doc=await xml(sh.path);if(doc)docs.push({name:sh.name,doc});}
-  const cam=camXlsx(docs.map(d=>({name:d.name,rows:camSheetRows(d.doc,strings)})));if(cam)return {segs:cam.segs,pages:cam.map.sheets.length,map:cam.map};
+  // each sheet on its own merits: curriculum area map, coverage checklist, or a plan (overview, scope and sequence)
+  const all=docs.map(d=>{const rows=camSheetRows(d.doc,strings);return {...d,rows,k:sheetKind(rows)};});
+  const camSheets=all.filter(d=>d.k.kind==='cam');const cam=camSheets.length?camXlsx(camSheets.map(d=>({name:d.name,rows:d.rows}))):null;
+  const checkSeg={};all.filter(d=>d.k.kind==='check').forEach(d=>{checkSeg[d.name]=checkSegs(d.name,d.rows,d.k.cells);});
+  const skip=new Set(camSheets.map(d=>d.name));
   const segs=[];let nSheets=0;const per=[];
-  for(const {name,doc} of docs){const sh={name};
+  for(const {name,doc} of docs){const sh={name};if(skip.has(name))continue;if(checkSeg[name]){nSheets++;checkSeg[name].forEach(c=>segs.push(c));per.push({name,segs:checkSeg[name]});continue;}
     const rows=[...doc.getElementsByTagName('row')].map(r=>[...r.getElementsByTagName('c')].map(c=>{const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0];
       if(t==='s')return v?strings[+v.textContent]||'':'';if(t==='inlineStr'){const is=c.getElementsByTagName('is')[0];return is?tx(is):'';}if(t==='b')return '';
       const val=v?v.textContent:'';return /^-?\d+(\.\d+)?(E-?\d+)?$/i.test(val)&&!/^\d{1,3}$/.test(val)?'':val;}).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean));
     const txt=rows.filter(r=>r.length);if(!txt.length)continue;nSheets++;
     const own=['Sheet: '+sh.name];txt.forEach(r=>chunk(r.join(' | '),600).forEach(c=>own.push(c)));
     own.forEach(c=>segs.push(c));per.push({name:sh.name,segs:own});}
+  if(cam)return {segs:cam.segs,pages:cam.map.sheets.length,map:cam.map,plan:segs.length?{segs,pages:nSheets,per}:null};
   return {segs,pages:nSheets,per};
 }
 function readCsv(text){const segs=[];text.replace(/\r/g,'').split('\n').forEach(line=>{const cells=[];let cur='',q=false;
@@ -1014,7 +1019,9 @@ async function readFile(file){
       r.per.forEach(p=>{const w=p.segs.join(' ').split(/\s+/).filter(Boolean).length;if(w<15)return;out.push({name:base+' › '+p.name,kind:'Excel',segs:p.segs,pages:1,words:w});});
       if(out.length)return out;}}
   const words=r.segs.join(' ').split(/\s+/).filter(Boolean).length;
-  if(r.map)return [{name:file.name,kind:'Curriculum area map',segs:r.segs,pages:r.pages,words:words||1,map:r.map}];
+  if(r.map){const out=[{name:file.name+(r.plan?' › map':''),kind:'Curriculum area map',segs:r.segs,pages:r.pages,words:words||1,map:r.map}];
+    if(r.plan){const w=r.plan.segs.join(' ').split(/\s+/).filter(Boolean).length;if(w>=15)out.push({name:file.name+' › plan',kind:kind,segs:r.plan.segs,pages:r.plan.pages,words:w});}
+    return out;}
   // A curriculum area map that isn't a Word file: its ticks can't be read, and its header codes must not count as coverage
   const all=r.segs.join(' ');if(/curriculum area map|map\s+[–-]\s+(template|example)/i.test(all)&&/teaching and learning unit/i.test(all)&&/AS no\./i.test(all)){
     toast(file.name+' looks like a curriculum area map. Its ticks can only be read from the Word (.docx) version, so its listed codes are ignored.');
@@ -1485,6 +1492,7 @@ function vHelp(){return `<div class="card help"><h2>How to use the Curriculum Au
  <h3>1. Set up</h3><ol><li>Name the sequence, then choose whether the upload is <b>one unit or term</b> or <b>a whole year</b>. A unit is expected to have gaps; a year plan should cover everything.</li>
  <li>Choose the subject (top right: English, Mathematics, or another learning area from the list), then the curriculum level. Science, HASS, Technologies, HPE and The Arts are set out in bands (e.g. Levels 3 and 4); a file for Level 3 counts for the Levels 3 and 4 band. Pick several for a composite class or a group of levels, or use <b>Quick select</b> for a whole school (Foundation–Level 6, Levels 7–10, or every level). A whole-school audit shows coverage by level and groups the gaps by level. If your file lists VC2 codes, the level is chosen for you.</li>
  <li>Drag in your Word, PDF, PowerPoint or Excel files, or a whole folder of them (lesson planners, unit overviews, term plans, yearly overview spreadsheets). In Excel, every worksheet is read, one row at a time; a sheet named for a level (e.g. “Level 4”) helps the tool place the file. Add several to audit a term or a year together.</li></ol>
+ <h3>How each kind of document is read</h3><ul><li><b>Plans</b> (yearly overviews, scope and sequences, curriculum area plans, unit and lesson plans): a VC2 code written where a unit is taught counts, and so do the words of the plan.</li><li><b>Curriculum area maps</b> (codes once across the top, units down the side): only the ticks or AS numbers in the grid count, never the codes listed across the top.</li><li><b>Coverage checklists</b> (every code listed once with a count or tick beside it, e.g. a COUNTIF tab): a code counts only when its count is above zero or it is ticked.</li><li>In Excel, each tab is judged on its own, so one workbook can hold a plan, a map and a checklist.</li></ul>
  <h3>Curriculum area maps</h3><ul><li>Upload a VCAA <b>curriculum area map</b> (the Word file) as it is. The tool reads which content descriptions each teaching and learning unit is ticked against, and the AS numbers beside them. Ticks can be Word check boxes, the ü tick in VCAA’s examples, or a typed x or Y; an AS number on its own also counts.</li><li>A school’s map kept in <b>Excel</b> (codes across the top, units down the side, a tab per level) works too. There, only a cell with an AS number counts (5, 15,16, 7-8 or 14b). A cell with “?” or anything else without a number isn’t counted; it is listed for checking.</li><li><b>Only ticks count.</b> The unit names, the content descriptions and codes listed across the top of the map, and the achievement standard sentences, are never counted as coverage. A blank template audits as nothing covered.</li><li>Upload the unit plans with the map and the <b>Curriculum area map check</b> lists content descriptions ticked on the map but not evident in the plans, and content evident in the plans but not ticked. The map’s achievement standard Y/N boxes appear beside each statement on Insights.</li><li>A map saved as a PDF can’t be read reliably (its ticks are lost), so it is left out with a message. Use the Word version.</li></ul>
  <h3>2. Read the summary</h3><ul><li>The tiles show how many content descriptions are covered, partly covered or not evident.</li><li>The strand table shows where coverage is thin.</li><li>The gap list groups missing content descriptions by sub-strand, with what to look for in a sequence that covers them.</li><li>With several files, <b>Which file covers what</b> shows each file’s contribution.</li></ul>
  <h3>3. Check and adjust</h3><ul><li>On <b>Content descriptions</b>, open <b>Show evidence</b> to see the lines in your document that matched.</li><li>Change any status with the drop-down: for example, ${SUBJ.key==='maths'?'number fact fluency taught in a separate daily block':'spelling taught in a separate block'} that isn’t in this document. Add a note to explain.</li><li><b>Not planned for this sequence</b> marks content you deliberately teach elsewhere, so it isn’t counted as a gap.</li>
@@ -1653,6 +1661,41 @@ function camXlsx(sheets){
   const segs=out.units.map(u=>'Teaching and learning unit: '+u.name+(u.sem?' ('+u.sem+')':''));
   return {segs,map:{units:out.units,as:out.as,queries:out.queries,header:out.header,sheets:out.sheets,codes:[...new Set(out.codes)],ticked:new Set(out.units.flatMap(u=>u.ticks.map(t=>t.code))).size}};
 }
+
+// ---------- What kind of sheet is this? ----------
+// 'cam'   a curriculum area map: one row of codes across the top, short marks (AS numbers, ticks, "?") in the grid below.
+//         Only the marks count.
+// 'check' a coverage checklist: each code listed once with a count or tick beside it (e.g. =COUNTIF of the plan).
+//         A code counts only when its count is above zero or it is ticked.
+// 'plan'  a yearly overview, scope and sequence, area plan or unit plan: codes are written where they are taught,
+//         so listed codes and the words around them are the evidence.
+function camCodeCells(rows){const out=[];rows.forEach((r,ri)=>{if(!r)return;Object.entries(r).forEach(([c,v])=>{const m=String(v).match(CAM_CODE);if(m)m.forEach(code=>out.push({r:ri,c:+c,code,v}));});});return out;}
+function sheetKind(rows){
+  const cells=camCodeCells(rows);if(!cells.length)return {kind:'text'};
+  const byRow={};cells.forEach(x=>{(byRow[x.r]=byRow[x.r]||[]).push(x);});
+  const cr=Object.keys(byRow).map(Number).sort((a,b)=>a-b).find(r=>byRow[r].length>=3);
+  if(cr!=null){
+    const head=byRow[cr],elsewhere=cells.filter(x=>x.r!==cr);
+    const cols=new Set(head.map(x=>x.c));let short=0,long=0;
+    for(let i=cr+1;i<rows.length;i++){const r=rows[i];if(!r)continue;const left=Object.entries(r).filter(([c])=>+c<Math.min(...cols));
+      if(left.some(([,v])=>/^achievement (standard|strands)|^key\b/i.test(v)))break;
+      cols.forEach(c=>{const v=r[c];if(v==null||v==='')return;(String(v).length<=15&&!CAM_CODE.test(v)?short++:long++);CAM_CODE.lastIndex=0;});}
+    // a map lists each code once, in its header, and its grid holds only short marks
+    if(elsewhere.length<3&&long<=Math.max(1,short*.1))return {kind:'cam'};
+  }
+  // checklist: codes listed once each, mostly with a number or mark in the next cell along
+  const uniq=new Set(cells.map(x=>x.code));
+  if(uniq.size===cells.length&&cells.length>=5){
+    const marked=cells.filter(x=>{const n=rows[x.r]&&rows[x.r][x.c+1];return n!=null&&/^(\d+(\.\d+)?|[✓✔☑☒xXyY]|yes|no|n|covered|not covered|0)$/i.test(String(n).trim());});
+    if(marked.length>=cells.length*.6)return {kind:'check',cells};
+  }
+  return {kind:'plan'};
+}
+// A checklist sheet as text: only the codes marked as covered, so unmarked ones are never counted
+function checkSegs(name,rows,cells){const segs=['Sheet: '+name+' (coverage checklist)'];
+  cells.forEach(x=>{const n=String((rows[x.r]||{})[x.c+1]??'').trim();if(/^(0+(\.0+)?|n|no|not covered)?$/i.test(n))return;
+    segs.push('Coverage checklist: '+x.code+' marked covered ('+n+')');});
+  return segs;}
 
 // ===================== Key terms from VCAA wording and elaborations =====================
 // Each content description gets up to 10 distinctive terms (words and two-word phrases) drawn from its own wording and its

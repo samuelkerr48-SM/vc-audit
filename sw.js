@@ -1,4 +1,4 @@
-const CACHE="ca-audit-202611191043";
+const CACHE="ca-audit-202611191051";
 const FILES=["./","./index.html","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png","./icons/maskable-512.png","./icons/apple-touch-180.png","./icons/favicon-48.png","./icons/favicon-32.png"];
 self.addEventListener("install",e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:"reload"})))))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith("ca-audit-")&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
