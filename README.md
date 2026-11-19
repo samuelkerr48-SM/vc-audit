@@ -9,6 +9,8 @@ Audit a school's teaching sequences against **Victorian Curriculum F–10 Versio
 - Progression across levels, achievement standards, when in the year, and a curriculum area map check
 - Word report, Excel gap action plan and one-page team summaries
 
+**Curriculum Area Map Creator** (in the same app: **Create a map** at the top, or https://samuelkerr48-sm.github.io/vc-audit/map-creator/): builds a curriculum area map from yearly overviews, scopes and sequences, curriculum area plans and unit plans, using the VCAA-style Excel CAM template. Check every tick, then download the map and audit it here.
+
 **Private:** files are read in the browser. Nothing is uploaded or sent anywhere, and no AI is used. Work is kept in the browser until a new audit is started.
 
 To use it offline, save `index.html` and open it in Chrome or Edge.

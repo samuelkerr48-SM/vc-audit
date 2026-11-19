@@ -125,6 +125,8 @@ span.pc{display:inline-block;width:22px;border-radius:4px}
 <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+<style>.toolnav{display:inline-flex;align-items:center;gap:6px;color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.55);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:600;white-space:nowrap}.toolnav:hover{background:rgba(255,255,255,.12)}</style>
+<style>@media(max-width:1440px){header.top .brandrow .sub{display:none}}</style>
 </head>
 <body>
 <header class="top"><div class="brandrow"><img id="brandLogo" alt="" hidden><h1>VC Curriculum Audit</h1><span class="pill">Victorian Curriculum 2.0</span><span class="sub">Map a sequence: what’s covered, what’s missing</span><span id="brandName" hidden></span><div class="subjsel" id="subj"></div><button id="setBtn" class="noprint">⚙ Settings</button></div><nav class="tabs" id="tabs"></nav></header>
@@ -2114,5 +2116,6 @@ window.VCAudit={insights:()=>insights(),conf:r=>conf(r),buildGapXlsx:()=>buildGa
 document.addEventListener('DOMContentLoaded',boot);
 })();
 </script>
-<script>if("serviceWorker" in navigator){addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script>
+<script>(function(){function add(){var r=document.querySelector('header.top .brandrow');if(!r||document.getElementById('toolnav'))return;var a=document.createElement('a');a.id='toolnav';a.className='toolnav';a.href='map-creator/';a.textContent='Create a map';a.title='Curriculum Area Map Creator: build a curriculum area map from your plans';var b=document.getElementById('setBtn');if(b&&b.parentNode)b.parentNode.insertBefore(a,b);else r.appendChild(a);}if(document.readyState!=='loading')add();else document.addEventListener('DOMContentLoaded',add);})();</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{scope:"./"}).catch(()=>{}));}</script>
 </body></html>

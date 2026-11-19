@@ -1,7 +1,7 @@
 {
  "name": "VC Curriculum Audit",
  "short_name": "Curriculum Audit",
- "description": "Audit teaching sequences and curriculum area maps against Victorian Curriculum 2.0.",
+ "description": "Audit plans and curriculum area maps against Victorian Curriculum 2.0, and build a curriculum area map from your plans.",
  "start_url": "./",
  "scope": "./",
  "id": "./",
@@ -9,8 +9,34 @@
  "background_color": "#ffffff",
  "theme_color": "#1F1646",
  "icons": [
-  {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-  {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-  {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  {
+   "src": "icons/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icons/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icons/maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ],
+ "shortcuts": [
+  {
+   "name": "Audit plans or a map",
+   "url": "./"
+  },
+  {
+   "name": "Create a curriculum area map",
+   "short_name": "Create a map",
+   "url": "./map-creator/"
+  }
  ]
 }
