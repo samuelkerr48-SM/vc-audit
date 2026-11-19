@@ -1649,7 +1649,8 @@ function camXlsx(sheets){
       const sample=/^sample$/i.test(unit.trim());  // the template's example row is not a unit
       const ticks=[];cols.forEach(col=>{const v=r[col.c];if(v==null||v===''||sample)return;
         if(/^not covered$/i.test(v.trim()))return;   // an explicit "Not covered" from the template's list
-        const n=camNums(v);
+        // "Yes" is a tick where the template's list is Yes / Not covered (e.g. Level 10A, which has no AS numbers)
+        const n=camNums(v)||(/^(yes|y|✓|✔)$/i.test(v.trim())?[]:null);
         if(n){ticks.push({code:col.code,as:n});n.forEach(x=>used.add(x));}
         else out.queries.push({sheet:name,unit:unit||'(unit not named)',code:col.code,v});});
       if(sample||(!unit&&!ticks.length))continue;
