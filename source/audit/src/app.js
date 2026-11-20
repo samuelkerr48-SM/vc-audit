@@ -84,6 +84,24 @@ function chunk(text,max=420){
   if(cur.trim()) out.push(cur.trim());
   return out.flatMap(c=>c.length>max*1.6?c.match(new RegExp('.{1,'+max+'}(\\s|$)','g')).map(x=>x.trim()):[c]);
 }
+// A table with terms or semesters across the top ("TERM 1" over weeks 1–10, "Semester 2" …): each row is split into one
+// line per term, tagged "[Term n]" or "[Semester n]", with the row's own labels (level, strand) in front, so each unit
+// counts for the term it sits under. rows: [[{c (first grid column), span, t}]]. Returns null for any other table.
+const TERM_LBL=/^\s*(?:(term|t)\s*([1-4])|(semester|sem)\s*([12]))\b/i;
+function termRows(rows){
+  let h=-1;const col={};
+  for(let i=0;i<Math.min(rows.length,5)&&h<0;i++){const lab=rows[i].filter(x=>TERM_LBL.test(x.t)&&x.t.trim().length<40);
+    const names=new Set(lab.map(x=>{const m=x.t.match(TERM_LBL);return m[1]?'Term '+m[2]:'Semester '+m[4];}));
+    if(names.size>=2){h=i;lab.forEach(x=>{const m=x.t.match(TERM_LBL);const n=m[1]?'Term '+m[2]:'Semester '+m[4];for(let k=x.c;k<x.c+(x.span||1);k++)col[k]=n;});}}
+  if(h<0)return null;
+  const first=Math.min(...Object.keys(col).map(Number));const out=[];
+  rows.forEach((r,i)=>{if(i<=h){const t=r.map(x=>x.t).filter(Boolean);const uniq=[...new Set(t)];if(uniq.length)out.push(uniq.join(' | '));return;}
+    const lab=r.filter(x=>x.c<first).map(x=>x.t).filter(Boolean).join(' | ');const by={};
+    r.filter(x=>x.c>=first&&x.t).forEach(x=>{const ns=new Set();for(let k=x.c;k<x.c+(x.span||1);k++)if(col[k])ns.add(col[k]);if(!ns.size)ns.add(col[x.c]||'');
+      ns.forEach(n=>{const a=by[n]=by[n]||[];if(a[a.length-1]!==x.t)a.push(x.t);});});
+    Object.entries(by).forEach(([n,a])=>{const uniq=[...new Set(a)];chunk((lab?lab+' | ':'')+uniq.join(' | '),600).forEach(c=>out.push(n?'['+n+'] '+c:c));});});
+  return out;
+}
 async function readDocx(buf){
   const zip=await JSZip.loadAsync(buf);
   const f=zip.file('word/document.xml'); if(!f) throw new Error('This Word file has no document body.');
@@ -95,9 +113,15 @@ async function readDocx(buf){
   const walk=node=>{[...node.children].forEach(ch=>{
     if(ch.namespaceURI!==W){walk(ch);return;}
     if(ch.localName==='p'){const t=ptext(ch);chunk(t).forEach(c=>segs.push(c));}
-    else if(ch.localName==='tbl'){[...ch.children].filter(r=>r.localName==='tr').forEach(tr=>{
-      const cells=[...tr.children].filter(c=>c.localName==='tc').map(tc=>[...tc.getElementsByTagNameNS(W,'p')].map(ptext).join(' ').trim()).filter(Boolean);
-      const row=cells.join(' | '); chunk(row,600).forEach(c=>segs.push(c));});}
+    else if(ch.localName==='tbl'){const trs=[...ch.children].filter(r=>r.localName==='tr');
+      // grid positions (gridBefore, gridSpan; vMerge continuations are empty), for tables with terms across the top
+      const grid=trs.map(tr=>{let g=0;const pr=[...tr.children].find(x=>x.localName==='trPr');if(pr){const gb=[...pr.children].find(x=>x.localName==='gridBefore');if(gb)g=+(gb.getAttributeNS(W,'val')||gb.getAttribute('w:val')||0);}
+        return [...tr.children].filter(c=>c.localName==='tc').map(tc=>{const p=[...tc.children].find(x=>x.localName==='tcPr');let span=1,cont=false;
+          if(p){const gs=[...p.children].find(x=>x.localName==='gridSpan');if(gs)span=+(gs.getAttributeNS(W,'val')||gs.getAttribute('w:val')||1);const vm=[...p.children].find(x=>x.localName==='vMerge');if(vm&&!/restart/.test(vm.getAttributeNS(W,'val')||vm.getAttribute('w:val')||''))cont=true;}
+          const c={c:g,span,t:cont?'':[...tc.getElementsByTagNameNS(W,'p')].map(ptext).join(' ').replace(/\s+/g,' ').trim()};g+=span;return c;});});
+      const tr2=termRows(grid);
+      if(tr2)tr2.forEach(c=>segs.push(c));
+      else grid.forEach(cells=>{const row=cells.map(x=>x.t).filter(Boolean).join(' | '); chunk(row,600).forEach(c=>segs.push(c));});}
     else if(ch.localName==='sdt'||ch.localName==='sdtContent'||ch.localName==='customXml') walk(ch);
   });};
   walk(body);
@@ -129,7 +153,14 @@ async function readXlsx(buf,skip){
       if(t==='s')return v?strings[+v.textContent]||'':'';if(t==='inlineStr'){const is=c.getElementsByTagName('is')[0];return is?tx(is):'';}if(t==='b')return '';
       const val=v?v.textContent:'';return /^-?\d+(\.\d+)?(E-?\d+)?$/i.test(val)&&!/^\d{1,3}$/.test(val)?'':val;}).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean));
     const txt=rows.filter(r=>r.length);if(!txt.length)continue;nSheets++;
-    const own=['Sheet: '+sh.name];txt.forEach(r=>chunk(r.join(' | '),600).forEach(c=>own.push(c)));
+    // terms or semesters across the top: one line per term (see termRows)
+    const cIdx=ref=>{const m=/^([A-Z]+)/.exec(ref||'');if(!m)return -1;let n=0;for(const ch of m[1])n=n*26+ch.charCodeAt(0)-64;return n-1;};
+    const span={};[...doc.getElementsByTagName('mergeCell')].forEach(m=>{const [a1,b1]=(m.getAttribute('ref')||'').split(':');if(b1)span[a1]=cIdx(b1)-cIdx(a1)+1;});
+    const grid=[...doc.getElementsByTagName('row')].map(r=>[...r.getElementsByTagName('c')].map(c=>{const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0];
+      let x='';if(t==='s')x=v?strings[+v.textContent]||'':'';else if(t==='inlineStr'){const is=c.getElementsByTagName('is')[0];x=is?tx(is):'';}else if(t!=='b'&&v)x=v.textContent;
+      const ref=c.getAttribute('r');return {c:cIdx(ref),span:span[ref]||1,t:String(x).replace(/\s+/g,' ').trim()};}).filter(x=>x.t));
+    const tr2=termRows(grid);
+    const own=['Sheet: '+sh.name];(tr2?tr2.map(x=>[x]):txt).forEach(r=>chunk(r.join(' | '),600).forEach(c=>own.push(c)));
     own.forEach(c=>segs.push(c));per.push({name:sh.name,segs:own});}
   const tabs={all:allTabs,skip:skip.filter(n=>allTabs.includes(n))};
   if(cam)return {segs:cam.segs,pages:cam.map.sheets.length,map:cam.map,plan:segs.length?{segs,pages:nSheets,per}:null,tabs};

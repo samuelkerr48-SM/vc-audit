@@ -15,8 +15,16 @@ function segWeight(s){if(RE_PASS_MAT.test(s))return CFG.wMat;if(RE_PASS_VOC.test
 function meta(f){
   if(f._m&&f._m.n===f.segs.length&&f._m.k===CFG.wMat+'|'+CFG.wVoc+'|'+CFG.wIntent)return f._m;
   const wt=[],term=[];let cur=0;const fn=(f.name.replace(/[_.]+/g,' ').match(/\b(?:Term|T)\s?([1-4])\b/i)||[])[1];if(fn)cur=+fn;
-  f.segs.forEach(s=>{wt.push(segWeight(s));const m=s.match(/\bTerm\s?([1-4])\b/i);
-    if(m){const t=+m[1];if(s.length<90||/^\s*(Sheet: )?Term\s?[1-4]\b/i.test(s))cur=t;term.push(t);}else term.push(cur);});
+  // a term is 1–4; a semester is [1,2] or [3,4]. "[Term 2] …" and "[Semester 1] …" mark a line from a table with terms
+  // or semesters across the top (see termRows): they set that line only.
+  const sem=n=>n==1?[1,2]:[3,4];
+  f.segs.forEach(s=>{wt.push(segWeight(s));
+    const tag=s.match(/^\[(Term|Semester) ([1-4])\]/);if(tag){term.push(tag[1]==='Term'?+tag[2]:sem(+tag[2]));return;}
+    const m=s.match(/\bTerm\s?([1-4])\b/i);
+    if(m){const t=+m[1];if(s.length<90||/^\s*(Sheet: )?Term\s?[1-4]\b/i.test(s))cur=t;term.push(t);return;}
+    const sm=s.match(/\bSem(?:ester)?\s?([12])\b/i);
+    if(sm){const t=sem(+sm[1]);if(s.length<90||/^\s*(Sheet: )?Sem(ester)?\s?[12]\b/i.test(s))cur=t;term.push(t);return;}
+    term.push(cur);});
   return f._m={n:f.segs.length,k:CFG.wMat+'|'+CFG.wVoc+'|'+CFG.wIntent,wt,term};
 }
 const stripFiles=fs=>fs.map(f=>({name:f.name,kind:f.kind,segs:f.segs,pages:f.pages,words:f.words,map:f.map,mapText:f.mapText}));
@@ -74,9 +82,9 @@ function insights(){
   let known=0,tot=0;S.files.forEach(f=>{const t=meta(f).term;tot+=t.length;known+=t.filter(Boolean).length;});ins.termShare=tot?known/tot:0;
   if(ins.termShare>=.3){
     R.rows.forEach(r=>{const ids=r.evid||[];const tc=[0,0,0,0,0];
-      ids.forEach(u=>{const seen=new Set();for(const fi in u.idx){const tm=meta(S.files[fi]).term;u.idx[fi].forEach(si=>seen.add(tm[si]));}seen.forEach(t=>tc[t]++);});
+      ids.forEach(u=>{const seen=new Set();for(const fi in u.idx){const tm=meta(S.files[fi]).term;u.idx[fi].forEach(si=>[].concat(tm[si]||[]).forEach(t=>seen.add(t)));}seen.forEach(t=>tc[t]++);});
       const need=Math.max(1,Math.ceil(ids.length/2));r.terms=[1,2,3,4].filter(t=>r.status!=='none'&&r.status!=='na'&&ids.length&&tc[t]>=need);
-      if(r.listed){[...R.listed[r.cd.code]].forEach(fi=>{const f=S.files[fi],tm=meta(f).term;f.segs.forEach((s,si)=>{if(tm[si]&&s.includes(r.cd.code)&&!r.terms.includes(tm[si]))r.terms.push(tm[si]);});});r.terms.sort();}});
+      if(r.listed){[...R.listed[r.cd.code]].forEach(fi=>{const f=S.files[fi],tm=meta(f).term;f.segs.forEach((s,si)=>{if(tm[si]&&s.includes(r.cd.code))[].concat(tm[si]).forEach(t=>{if(!r.terms.includes(t))r.terms.push(t);});});});r.terms.sort();}});
     ins.termStrand=SUBJ.strands.map(s=>{const rs=R.rows.filter(r=>r.cd.strand===s);return {s,n:rs.length,t:[1,2,3,4].map(t=>rs.filter(r=>r.terms.includes(t)).length)};});
     ins.lateOnly=R.rows.filter(r=>r.terms.length===1&&r.terms[0]===4);ins.onceOnly=R.rows.filter(r=>r.terms.length===1);
     ins.noTerm=ins.termStrand.filter(x=>x.n).flatMap(x=>x.t.map((n,i)=>n?null:x.s+' in Term '+(i+1))).filter(Boolean);
@@ -141,13 +149,13 @@ function vInsights(){
      <div class="small muted" style="margin-top:6px"><span class="pc c">●</span> clear evidence &nbsp; <span class="pc p">◐</span> some &nbsp; <span class="pc n">✕</span> expected, no evidence &nbsp; <span class="pc x">?</span> no files for this level &nbsp; blank = not expected at this level</div></details></div>`;
   }
   // when in the year
-  const termCard=`<div class="card"><h2>When in the year</h2>${I.termStrand?`<p class="small muted">Which term each content description shows up in. The tool reads “Term 1” to “Term 4” from headings, rows, sheet names and file names (${Math.round(I.termShare*100)}% of your plan has a term).</p>
+  const termCard=`<div class="card"><h2>When in the year</h2>${I.termStrand?`<p class="small muted">Which term each content description shows up in. The tool reads “Term 1” to “Term 4” or “Semester 1” and “Semester 2” from headings, rows, the top of a table (terms across the weeks), sheet names and file names; a semester counts for both its terms (${Math.round(I.termShare*100)}% of your plan has a term).</p>
     <table><tr><th>Strand</th><th class="right">Term 1</th><th class="right">Term 2</th><th class="right">Term 3</th><th class="right">Term 4</th></tr>${I.termStrand.filter(x=>x.n).map(x=>`<tr><td><b>${x.s}</b> <span class="small muted">${x.n} content descriptions</span></td>${x.t.map(n=>`<td class="right">${n?n:'<span class="tag s-none">0</span>'}</td>`).join('')}</tr>`).join('')}</table>
     ${I.noTerm.length?`<div class="warn"><b>Not revisited:</b> no evidence of ${I.noTerm.map(esc).join('; ')}.</div>`:''}
     ${I.lateOnly.length?`<div class="warn"><b>Left to Term 4:</b> ${I.lateOnly.length} content description${I.lateOnly.length>1?'s appear':' appears'} only in Term 4 (${I.lateOnly.slice(0,14).map(r=>r.cd.code).join(', ')}${I.lateOnly.length>14?'…':''}).</div>`:''}
     <p class="small muted">${I.onceOnly.length} content description${I.onceOnly.length===1?' is':'s are'} taught in one term only.</p>
     <details><summary>Show every content description by term</summary><table><tr><th>Code</th><th>Content description</th><th>T1</th><th>T2</th><th>T3</th><th>T4</th></tr>${R.rows.filter(r=>r.status!=='none'&&r.status!=='na').map(r=>`<tr><td><span class="code">${r.cd.code}</span></td><td class="small">${esc(r.cd.description)}</td>${[1,2,3,4].map(t=>`<td>${r.terms.includes(t)?'<span class="dot c"></span>':''}</td>`).join('')}</tr>`).join('')}</table></details>`
-    :`<p class="small muted">The tool couldn’t find terms in these files${I.termShare?` (only ${Math.round(I.termShare*100)}% of the plan has one)`:''}. To use this view, put “Term 1” to “Term 4” in headings, in a column of your overview, in sheet names or in file names.</p>`}</div>`;
+    :`<p class="small muted">The tool couldn’t find terms in these files${I.termShare?` (only ${Math.round(I.termShare*100)}% of the plan has one)`:''}. To use this view, put “Term 1” to “Term 4” (or “Semester 1” and “Semester 2”) in headings, across the top or down a column of your overview, in sheet names or in file names.</p>`}</div>`;
   // emphasis
   const mx=Math.max(...I.emph.map(e=>Math.max(e.plan,e.cur)),.01);
   const emphCard=`<div class="card"><h2>Emphasis and thin coverage</h2><p class="small muted">How much of what your plans mention belongs to each strand, beside that strand’s share of the curriculum. This counts lines of your documents, not lesson time, so treat it as a prompt.</p>
