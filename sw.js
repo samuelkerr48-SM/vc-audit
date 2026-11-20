@@ -1,4 +1,4 @@
-const CACHE="ca-audit-202611201139";
+const CACHE="ca-audit-202611201215";
 const PAGES=["./","./map-creator/"];
 const FILES=PAGES.concat(["./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png","./icons/maskable-512.png","./icons/apple-touch-180.png","./icons/favicon-48.png","./icons/favicon-32.png"]);
 self.addEventListener("install",e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:"reload"})))))});

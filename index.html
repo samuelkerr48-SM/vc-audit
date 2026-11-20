@@ -120,6 +120,8 @@ span.pc{display:inline-block;width:22px;border-radius:4px}
 @media print{#modal{display:none!important}}
 
 .mapflag{color:#8a5200;font-weight:600;margin-top:2px}
+.tabpick{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:8px 0 2px;padding:6px 8px;background:#f4f8f9;border-radius:6px}.tabpick .chip.sm{padding:2px 8px;font-size:12px}.tabpick .chip:not(.on){text-decoration:line-through;opacity:.7}
+.vlpbar{margin:6px 0 10px;padding:6px 10px;background:#eef7f8;border-radius:6px}.lookfor.vlp{color:#1F1646}.link{background:none;border:0;color:#D40032;text-decoration:underline;cursor:pointer;padding:0;font:inherit}
 </style><style id="brandCss"></style><link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F1646">
 <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
@@ -943,7 +945,7 @@ async function readDocx(buf){
   walk(body);
   return {segs,pages:null};
 }
-async function readXlsx(buf){
+async function readXlsx(buf,skip){
   const zip=await JSZip.loadAsync(buf);
   const xml=async n=>{const f=zip.file(n);return f?new DOMParser().parseFromString(await f.async('string'),'application/xml'):null;};
   const tx=el=>[...el.getElementsByTagName('t')].map(t=>t.textContent).join('');
@@ -953,24 +955,33 @@ async function readXlsx(buf){
   if(rels)[...rels.getElementsByTagName('Relationship')].forEach(r=>{target[r.getAttribute('Id')]=r.getAttribute('Target');});
   let sheets=wb?[...wb.getElementsByTagName('sheet')].map(sh=>{const id=sh.getAttribute('r:id')||sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');let t=target[id]||'';t=t.replace(/^\/?(xl\/)?/,'xl/');return {name:sh.getAttribute('name'),path:t};}):[];
   if(!sheets.length)sheets=Object.keys(zip.files).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort().map((path,i)=>({name:'Sheet '+(i+1),path}));
+  // the tab picker: draft, archived and future-year tabs are left out unless the teacher ticks them
+  const allTabs=sheets.map(sh=>sh.name);if(!skip)skip=defaultSkip(allTabs);
+  const taken=sheets.filter(sh=>!skip.includes(sh.name));
   // a curriculum area map kept as a spreadsheet: read its grid, never its listing
-  const docs=[];for(const sh of sheets){const doc=await xml(sh.path);if(doc)docs.push({name:sh.name,doc});}
+  const docs=[];for(const sh of taken){const doc=await xml(sh.path);if(doc)docs.push({name:sh.name,doc});}
   // each sheet on its own merits: curriculum area map, coverage checklist, or a plan (overview, scope and sequence)
   const all=docs.map(d=>{const rows=camSheetRows(d.doc,strings);return {...d,rows,k:sheetKind(rows)};});
   const camSheets=all.filter(d=>d.k.kind==='cam');const cam=camSheets.length?camXlsx(camSheets.map(d=>({name:d.name,rows:d.rows}))):null;
   const checkSeg={};all.filter(d=>d.k.kind==='check').forEach(d=>{checkSeg[d.name]=checkSegs(d.name,d.rows,d.k.cells);});
-  const skip=new Set(camSheets.map(d=>d.name));
+  const camNames=new Set(camSheets.map(d=>d.name));
   const segs=[];let nSheets=0;const per=[];
-  for(const {name,doc} of docs){const sh={name};if(skip.has(name))continue;if(checkSeg[name]){nSheets++;checkSeg[name].forEach(c=>segs.push(c));per.push({name,segs:checkSeg[name]});continue;}
+  for(const {name,doc} of docs){const sh={name};if(camNames.has(name))continue;if(checkSeg[name]){nSheets++;checkSeg[name].forEach(c=>segs.push(c));per.push({name,segs:checkSeg[name]});continue;}
     const rows=[...doc.getElementsByTagName('row')].map(r=>[...r.getElementsByTagName('c')].map(c=>{const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0];
       if(t==='s')return v?strings[+v.textContent]||'':'';if(t==='inlineStr'){const is=c.getElementsByTagName('is')[0];return is?tx(is):'';}if(t==='b')return '';
       const val=v?v.textContent:'';return /^-?\d+(\.\d+)?(E-?\d+)?$/i.test(val)&&!/^\d{1,3}$/.test(val)?'':val;}).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean));
     const txt=rows.filter(r=>r.length);if(!txt.length)continue;nSheets++;
     const own=['Sheet: '+sh.name];txt.forEach(r=>chunk(r.join(' | '),600).forEach(c=>own.push(c)));
     own.forEach(c=>segs.push(c));per.push({name:sh.name,segs:own});}
-  if(cam)return {segs:cam.segs,pages:cam.map.sheets.length,map:cam.map,plan:segs.length?{segs,pages:nSheets,per}:null};
-  return {segs,pages:nSheets,per};
+  const tabs={all:allTabs,skip:skip.filter(n=>allTabs.includes(n))};
+  if(cam)return {segs:cam.segs,pages:cam.map.sheets.length,map:cam.map,plan:segs.length?{segs,pages:nSheets,per}:null,tabs};
+  return {segs,pages:nSheets,per,tabs};
 }
+// Tabs left out by default: drafts, old or archived copies, next year's or later, instructions and lists
+const SKIP_TAB=/\b(draft|old|archived?|backup|copy|previous|next year|future|proposed|instructions?|read ?me|how to|lists?|lookups?|dropdowns?|data validation|settings)\b|\(\d\)\s*$/i;
+function defaultSkip(names){const yr=new Date().getFullYear();
+  const sk=names.filter(n=>SKIP_TAB.test(n)||(n.match(/\b20\d\d\b/g)||[]).some(y=>+y>yr));
+  return sk.length<names.length?sk:[];}
 function readCsv(text){const segs=[];text.replace(/\r/g,'').split('\n').forEach(line=>{const cells=[];let cur='',q=false;
   for(let i=0;i<line.length;i++){const ch=line[i];if(q){if(ch==='"'&&line[i+1]==='"'){cur+='"';i++;}else if(ch==='"')q=false;else cur+=ch;}else if(ch==='"')q=true;else if(ch===','){cells.push(cur);cur='';}else cur+=ch;}
   cells.push(cur);const row=cells.map(c=>c.trim()).filter(Boolean).join(' | ');chunk(row,600).forEach(c=>segs.push(c));});return {segs,pages:null};}
@@ -1002,7 +1013,7 @@ async function readPdf(buf){
   }
   return {segs,pages:doc.numPages};
 }
-async function readFile(file){
+async function readFile(file,skip){
   const fname=file._path||file.webkitRelativePath||file.name;
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const buf=await file.arrayBuffer();
@@ -1010,7 +1021,8 @@ async function readFile(file){
   if(ext==='docx'||ext==='docm'||ext==='dotx'){kind='Word';r=await readDocx(buf);}
   else if(ext==='pdf'){kind='PDF';r=await readPdf(buf);}
   else if(ext==='pptx'){kind='PowerPoint';r=await readPptx(buf);}
-  else if(ext==='xlsx'||ext==='xlsm'){kind='Excel';r=await readXlsx(buf);}
+  else if(ext==='xlsx'||ext==='xlsm'){kind='Excel';r=await readXlsx(buf,skip);LAST_TABS=r.tabs&&r.tabs.all.length>1?r.tabs:null;
+    if(r.tabs&&r.tabs.all.length&&r.tabs.skip.length===r.tabs.all.length)throw new Error('Every tab is left out. Tick at least one tab.');}
   else if(ext==='csv'){kind='CSV';r=readCsv(new TextDecoder().decode(buf));}
   else if(ext==='xls') throw new Error('Older .xls files can’t be read. Open it in Excel and use File › Save As › Excel Workbook (.xlsx).');
   else if(ext==='txt'||ext==='md'){kind='Text';r={segs:chunk(new TextDecoder().decode(buf).replace(/\r/g,'').split(/\n\s*\n/).join(' . ')),pages:null};}
@@ -1034,6 +1046,13 @@ async function readFile(file){
   return [{name:fname,kind,segs:r.segs,pages:r.pages,words}];
 }
 
+// Excel files kept in memory this session, so their tabs can be chosen again without re-adding the file
+const XFILES={};
+async function readFileTagged(file,skip){const rs=await readFile(file,skip);
+  if(/\.xls[xm]$/i.test(file.name)){XFILES[file.name]=file;
+    rs.forEach(r=>{r.src=file.name;if(LAST_TABS)r.tabs=LAST_TABS;});}
+  LAST_TABS=null;return rs;}
+let LAST_TABS=null;
 // ---------- analysis ----------
 function gre(re){return new RegExp(re.source,re.flags.includes('g')?re.flags:re.flags+'g');}
 function snippet(text,re){
@@ -1154,10 +1173,13 @@ function render(){
 const bind={};
 
 // ---------- Setup ----------
+function tabPicker(f){const live=!!XFILES[f.src];
+  return `<div class="tabpick small"><b>${esc(f.src)}</b>: tabs read ${f.tabs.all.map(n=>`<button class="chip sm ${f.tabs.skip.includes(n)?'':'on'}" data-xtab="${esc(n)}" data-xsrc="${esc(f.src)}" ${live?'':'disabled'}>${esc(n)}</button>`).join('')}${live?'':' <span class="muted">Add the file again to change the tabs.</span>'}</div>`;}
 function vSetup(){
   const lv=LEVELS.map(l=>`<button class="chip ${S.levels.includes(l)?'on':''}" data-lv="${l}">${LVSHORT(l)}</button>`).join('');
   const files=S.files.map((f,i)=>{const codes=new Set();f.segs.forEach(s=>{for(const m of s.matchAll(SUBJ.codeRe))codes.add(m[0]);});
-    return `<div class="file"><span class="tag s-na">${f.kind}</span><div style="flex:1"><div class="nm">${esc(f.name)}</div><div class="meta">${S.levels.length>1?(()=>{const fl=fileLevel(f),d=detectLevel(f);return `<label>Counts for <select data-flv="${esc(f.name)}"><option value="">Auto: ${d.lv==='*'?'all selected levels':LVNAME(d.lv)} (${esc(d.why)})</option><option value="*" ${(S.fileLv||{})[f.name]==='*'?'selected':''}>All selected levels</option>${LEVELS.filter(l=>S.levels.includes(l)).map(l=>`<option value="${l}" ${(S.fileLv||{})[f.name]===l?'selected':''}>${LVNAME(l)}</option>`).join('')}</select></label> · `;})():''}${f.words.toLocaleString()} words${f.pages?' · '+f.pages+(f.kind==='PowerPoint'?' slides':f.kind==='Excel'?(f.pages===1?' sheet':' sheets'):' pages'):''}${codes.size?' · '+codes.size+' curriculum codes listed':''}</div></div><button class="x" data-rm="${i}" title="Remove">✕</button></div>`;}).join('');
+    const pick=f.tabs&&S.files.findIndex(x=>x.src===f.src)===i?tabPicker(f):'';
+    return pick+`<div class="file"><span class="tag s-na">${f.kind}</span><div style="flex:1"><div class="nm">${esc(f.name)}</div><div class="meta">${S.levels.length>1?(()=>{const fl=fileLevel(f),d=detectLevel(f);return `<label>Counts for <select data-flv="${esc(f.name)}"><option value="">Auto: ${d.lv==='*'?'all selected levels':LVNAME(d.lv)} (${esc(d.why)})</option><option value="*" ${(S.fileLv||{})[f.name]==='*'?'selected':''}>All selected levels</option>${LEVELS.filter(l=>S.levels.includes(l)).map(l=>`<option value="${l}" ${(S.fileLv||{})[f.name]===l?'selected':''}>${LVNAME(l)}</option>`).join('')}</select></label> · `;})():''}${f.words.toLocaleString()} words${f.pages?' · '+f.pages+(f.kind==='PowerPoint'?' slides':f.kind==='Excel'?(f.pages===1?' sheet':' sheets'):' pages'):''}${codes.size?' · '+codes.size+' curriculum codes listed':''}</div></div><button class="x" data-rm="${i}" title="Remove">✕</button></div>`;}).join('');
   return `
   <div class="note">Audit a teaching sequence against <b>Victorian Curriculum 2.0 ${SUBJ.full}</b>. Upload the sequence and the tool shows which content descriptions it covers, which are missing, and ${SUBJ.key==='maths'?'which mathematical practices, teaching routines, representations and contexts it includes':'which text types, genres, themes and skills it includes'}. <b>Your files stay on this computer.</b> Nothing is uploaded or sent anywhere.</div>
   <div class="card"><h2><span class="step">1</span>What are you auditing?</h2>
@@ -1196,6 +1218,10 @@ bind.setup=()=>{
   ['dragleave','drop'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove('over');}));
   d.addEventListener('drop',e=>{droppedFiles(e.dataTransfer).then(addFiles);});
   $$('[data-flv]').forEach(sel=>sel.onchange=()=>{S.fileLv=S.fileLv||{};if(sel.value)S.fileLv[sel.dataset.flv]=sel.value;else delete S.fileLv[sel.dataset.flv];analyse();save();});
+  $$('[data-xtab]').forEach(b=>b.onclick=async()=>{const src=b.dataset.xsrc,n=b.dataset.xtab;const f=S.files.find(x=>x.src===src);if(!f||!XFILES[src])return;
+    const sk=new Set(f.tabs.skip);sk.has(n)?sk.delete(n):sk.add(n);if(sk.size===f.tabs.all.length){toast('Keep at least one tab.');return;}
+    const keepLv={};S.files.filter(x=>x.src===src).forEach(x=>{if((S.fileLv||{})[x.name])keepLv[x.name]=S.fileLv[x.name];});
+    await addFiles([XFILES[src]],[...sk]);Object.assign(S.fileLv=S.fileLv||{},keepLv);});
   $$('[data-rm]').forEach(b=>b.onclick=()=>{S.files.splice(+b.dataset.rm,1);analyse();save();render();});
   $('#addPaste').onclick=()=>{const t=$('#paste').value;if(t.trim().split(/\s+/).length<15){toast('Paste a bit more text first.');return;}
     S.files.push({name:'Pasted text '+(S.files.filter(f=>f.kind==='Pasted').length+1),kind:'Pasted',segs:chunk(t.replace(/\r/g,'').split(/\n\s*\n/).join(' . ')),pages:null,words:t.split(/\s+/).length});analyse();save();render();};
@@ -1205,12 +1231,13 @@ bind.setup=()=>{
   const c=$('#clearAll');if(c)c.onclick=()=>{if(!confirmInline(c))return;S={...S,name:'',files:[],overrides:{},notes:{}};R=null;save();render();};
 };
 function confirmInline(btn){if(btn.dataset.sure)return true;btn.dataset.sure=1;btn.textContent='Click again to clear everything';setTimeout(()=>{if(btn.isConnected){delete btn.dataset.sure;btn.textContent='Start a new audit';}},4000);return false;}
-async function addFiles(list){
+async function addFiles(list,skip){
   const busy=$('#busy');let skipped=0;const bulk=list.some(f=>f._path||f.webkitRelativePath);
   if(bulk){const n0=list.length;list=list.filter(f=>OKEXT.test(f.name)&&!/^(~\$|\.)/.test(f.name));skipped=n0-list.length;}
   const before=S.files.length;
   for(const f of list){busy.textContent='Reading '+f.name+'…';
-    try{const rs=await readFile(f);rs.forEach(r=>{S.files=S.files.filter(x=>x.name!==r.name);S.files.push(r);});if(rs.length>1)toast(f.name+': '+rs.length+' level tabs added as separate entries.');}
+    try{const rs=await readFileTagged(f,skip);S.files=S.files.filter(x=>x.src!==f.name);rs.forEach(r=>{S.files=S.files.filter(x=>x.name!==r.name);S.files.push(r);});if(rs.length>1&&!skip)toast(f.name+': '+rs.length+' entries added (a map, a plan, or a tab per level).');
+      const tb=rs[0]&&rs[0].tabs;if(tb&&tb.skip.length&&!skip)toast(f.name+': left out '+tb.skip.join(', ')+'. Tick a tab under the file to include it.',6000);}
     catch(e){toast(f.name+': '+(e.message||'could not be read'));console.error(e);}}
   busy.textContent='';
   // Suggest a level from codes in the files if none chosen
@@ -1236,7 +1263,7 @@ function vSummary(){
   const gaps=R.rows.filter(r=>r.status==='none'||(isYear&&r.status==='part'));
   const byLevel=S.levels.length>2;const bySub={};gaps.forEach(r=>{const k=byLevel?LVNAME(String(r.cd.level))+' · '+r.cd.strand:r.cd.substrand;(bySub[k]=bySub[k]||[]).push(r);});
   const order=byLevel?(a,b)=>LEVELS.indexOf(String(a[1][0].cd.level))-LEVELS.indexOf(String(b[1][0].cd.level))||SUBJ.strands.indexOf(a[1][0].cd.strand)-SUBJ.strands.indexOf(b[1][0].cd.strand):(a,b)=>b[1].length-a[1].length;
-  const gapHtml=Object.entries(bySub).sort(order).map(([ss,rs])=>`<div class="gap"><div class="h">${esc(ss)} <span class="small muted">(${rs.length})</span></div>${rs.map(r=>`<div class="small" style="margin-top:4px">${S.levels.length>1&&!byLevel?`<span class="lvlh">${LVNAME(String(r.cd.level))}</span>`:''}<span class="code">${r.cd.code}</span> ${esc(r.cd.description)} ${r.status==='part'?tag('part'):''}<div class="lookfor"><b>Look for:</b> ${esc(lookFor(r))}</div></div>`).join('')}</div>`).join('');
+  const gapHtml=Object.entries(bySub).sort(order).map(([ss,rs])=>`<div class="gap"><div class="h">${esc(ss)} <span class="small muted">(${rs.length})</span></div>${rs.map(r=>`<div class="small" style="margin-top:4px">${S.levels.length>1&&!byLevel?`<span class="lvlh">${LVNAME(String(r.cd.level))}</span>`:''}<span class="code">${r.cd.code}</span> ${esc(r.cd.description)} ${r.status==='part'?tag('part'):''}<div class="lookfor"><b>Look for:</b> ${esc(lookFor(r))}</div>${vlpLine(r.cd)?`<div class="lookfor vlp">${esc(vlpLine(r.cd))}</div>`:''}</div>`).join('')}</div>`).join('');
   // core text types
   const G=SUBJ.glance;const tt=R.tax[G.key].flatMap(([,it])=>it);const core=SUBJ.core[band()];const missCore=core.filter(l=>{const x=tt.find(t=>t.label===l);return !x||x.h.segs===0;});
   const fn=G.special?R.tax[G.special.key][0][1][G.special.idx]:null;
@@ -1274,7 +1301,7 @@ function vSummary(){
   ${mapCard()}
   ${levelCard()}
   ${fileMatrix}
-  <div class="card"><h2>${isYear?'Gaps to plan for':'Not in this sequence'}</h2><p class="small muted">${isYear?(S.levels.length>2?'Content descriptions with no or only partial evidence, grouped by level and strand.':'Content descriptions with no or only partial evidence, grouped by sub-strand, biggest gaps first.'):'Content descriptions this sequence doesn’t address. These need to be covered by other units this year.'} Mark any that are taught in ways the document doesn’t show on the Content descriptions tab.</p>${gapHtml||'<p>No gaps found. Every content description has evidence.</p>'}</div>`;
+  <div class="card"><h2>${isYear?'Gaps to plan for':'Not in this sequence'}</h2><p class="small muted">${isYear?(S.levels.length>2?'Content descriptions with no or only partial evidence, grouped by level and strand.':'Content descriptions with no or only partial evidence, grouped by sub-strand, biggest gaps first.'):'Content descriptions this sequence doesn’t address. These need to be covered by other units this year.'} Mark any that are taught in ways the document doesn’t show on the Content descriptions tab.</p>${vlpCard()}${gapHtml||'<p>No gaps found. Every content description has evidence.</p>'}</div>`;
 }
 function byLevelRows(){return LEVELS.filter(l=>S.levels.includes(l)).map(l=>{const rs=R.rows.filter(r=>String(r.cd.level)===l);return {l,rs,c:counts(rs),st:SUBJ.strands.map(st=>{const x=rs.filter(r=>r.cd.strand===st);return {st,n:x.length,cov:x.filter(r=>r.status==='cov').length};})};});}
 function auditTitle(){return S.name||(S.levels.length>2?'Whole-school audit':S.files.length>1?'Curriculum audit':'Untitled sequence');}
@@ -1298,7 +1325,7 @@ function levelCard(){if(S.levels.length<2)return '';const rows=byLevelRows();
    ${rows.map(x=>`<tr><td><b>${LVNAME(x.l)}</b></td><td>${bar(x.c,x.rs.length)}</td><td class="right">${x.c.cov}/${x.rs.length} <span class="small muted">(${Math.round(100*x.c.cov/(x.rs.length||1))}%)</span></td>${x.st.map(y=>`<td class="right small">${y.n?`<span class="${y.cov===y.n?'':y.cov===0?'tag s-none':''}">${y.cov}/${y.n}</span>`:'–'}</td>`).join('')}</tr>`).join('')}</table></div></div>`;}
 function elabFor(cd,strip){const el=(cd.el||[]).filter(e=>e.length>20);if(!el.length)return '';return el[0];}
 function lookFor(r){if(SUBJ.kwOnly||!r.cd.concepts.length){const e=elabFor(r.cd);const miss=(r.cd.kw||[]).filter(k=>!(r.kw||[]).some(h=>h.t===k.t&&h.v)).slice(0,4).map(k=>surf(k.t));return (e?'VCAA example: '+e+'. ':'')+(miss.length?'Key words not seen: '+miss.join(', ')+'.':'');}const pick=l=>l.filter(id=>!SUBJ.byId[id].opt).sort((x,y)=>SUBJ.byId[y].w-SUBJ.byId[x].w);let ids=pick(r.missing);if(!ids.length)ids=pick(r.cd.concepts);if(!ids.length)ids=r.cd.concepts;return ids.slice(0,2).map(id=>SUBJ.byId[id].hint).join(' ');}
-bind.summary=()=>{$$('[data-go]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.go;render();window.scrollTo(0,0);});};
+bind.summary=()=>{bindVlp();$$('[data-go]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.go;render();window.scrollTo(0,0);});};
 
 // ---------- Content descriptions ----------
 let F={strand:'',status:'',q:'',open:{},lv:''};
@@ -1413,7 +1440,7 @@ function reportHtml(){
    <table><tr><th>Strand</th><th>Covered</th><th>Partly</th><th>Not evident</th></tr>${SUBJ.strands.map(st=>{const cc=counts(R.rows.filter(r=>r.cd.strand===st));return `<tr><td>${st}</td><td>${cc.cov}</td><td>${cc.part}</td><td>${cc.none}</td></tr>`;}).join('')}</table>
    ${S.levels.length>1?`<h2>Coverage by level</h2><table><tr><th>Level</th><th>Covered</th><th>Partly</th><th>Not evident</th>${SUBJ.strands.map(st=>`<th>${st} covered</th>`).join('')}</tr>${byLevelRows().map(x=>`<tr><td>${LVNAME(x.l)}</td><td>${x.c.cov}/${x.rs.length}</td><td>${x.c.part}</td><td>${x.c.none}</td>${x.st.map(y=>`<td>${y.n?y.cov+'/'+y.n:'–'}</td>`).join('')}</tr>`).join('')}</table>`:''}
    ${S.files.some(f=>f.map)?`<h2>Curriculum area map check</h2><p>${R.rows.filter(r=>r.mapped).length} of ${R.rows.length} content descriptions ticked on the map. Only ticks count.</p>${R.rows.filter(r=>r.mapFlag).length?`<table><tr><th>Code</th><th>Content description</th><th>Check</th></tr>${R.rows.filter(r=>r.mapFlag).map(r=>`<tr class="tr"><td><b>${r.cd.code}</b></td><td>${esc(r.cd.description)}</td><td>${r.mapFlag==='notInPlans'?'On the map, not in the plans':'In the plans, not on the map'}</td></tr>`).join('')}</table>`:''}`:''}
-   <h2>Gaps to plan for</h2>${gaps.length?`<table><tr><th>Code</th><th>Content description</th><th>Status</th></tr>${gaps.map(r=>`<tr class="tr"><td><b>${r.cd.code}</b></td><td>${esc(r.cd.description)}<div style="color:#5d5a70;font-size:10.5px">Look for: ${esc(lookFor(r))}</div></td><td>${tag(r.status)}</td></tr>`).join('')}</table>`:'<p>None.</p>'}
+   <h2>Gaps to plan for</h2>${gaps.length?`<table><tr><th>Code</th><th>Content description</th><th>Status</th></tr>${gaps.map(r=>`<tr class="tr"><td><b>${r.cd.code}</b></td><td>${esc(r.cd.description)}<div style="color:#5d5a70;font-size:10.5px">Look for: ${esc(lookFor(r))}</div>${vlpLine(r.cd)?`<div style="color:#1F1646;font-size:10.5px">${esc(vlpLine(r.cd))}</div>`:''}</td><td>${tag(r.status)}</td></tr>`).join('')}</table>`:'<p>None.</p>'}
    <h2>${esc(SUBJ.taxTab.replace('&','and'))}</h2><table>${taxRows(list,missCore).map(([x,y])=>`<tr><td style="width:200px"><b>${esc(x)}</b></td><td>${esc(y)}</td></tr>`).join('')}</table>
    ${insightLines().length?`<h2>Insights</h2>${insightLines().map(([h,l])=>`<p><b>${esc(h)}</b></p><ul>${l.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`).join('')}`:''}
    <h2>All content descriptions</h2><table><tr><th>Code</th><th>Content description</th><th>Status</th><th>Notes</th></tr>${rowsH}</table>
@@ -1455,7 +1482,7 @@ async function buildDocx(){
   // gaps
   body+=h2(S.scope==='year'?'Gaps to plan for':'Not in this sequence (plan elsewhere in the year)');
   const gaps=R.rows.filter(r=>r.status==='none'||r.status==='part');
-  body+=gaps.length?table([1500,10500,2300],gaps.map(r=>tr([cell(para(run(r.cd.code,{b:1,sz:18})),{w:1500}),cell(para(run(r.cd.description,{sz:18}))+para(run('Look for: '+lookFor(r),{i:1,sz:16,c:'5D5A70'})),{w:10500}),cell(para(run(STATUS[r.status],{b:1,sz:18,c:TXT[r.status]})),{w:2300,fill:COL[r.status]})])),['Code','Content description','Status']):para(run('None.'));
+  body+=gaps.length?table([1500,10500,2300],gaps.map(r=>tr([cell(para(run(r.cd.code,{b:1,sz:18})),{w:1500}),cell(para(run(r.cd.description,{sz:18}))+para(run('Look for: '+lookFor(r),{i:1,sz:16,c:'5D5A70'}))+(vlpLine(r.cd)?para(run(vlpLine(r.cd),{sz:16,c:'1F1646'})):''),{w:10500}),cell(para(run(STATUS[r.status],{b:1,sz:18,c:TXT[r.status]})),{w:2300,fill:COL[r.status]})])),['Code','Content description','Status']):para(run('None.'));
   // texts
   body+=h2(SUBJ.taxTab.replace('&','and'));
   const G=SUBJ.glance;const tt=R.tax[G.key].flatMap(([,it])=>it);const missCore=SUBJ.core[band()].filter(l=>{const x=tt.find(t=>t.label===l);return !x||!x.h.segs;});
@@ -1497,6 +1524,9 @@ function vHelp(){return `<div class="card help"><h2>How to use the Curriculum Au
  <li>Choose the subject (top right: English, Mathematics, or another learning area from the list), then the curriculum level. Science, HASS, Technologies, HPE and The Arts are set out in bands (e.g. Levels 3 and 4); a file for Level 3 counts for the Levels 3 and 4 band. Pick several for a composite class or a group of levels, or use <b>Quick select</b> for a whole school (Foundation–Level 6, Levels 7–10, or every level). A whole-school audit shows coverage by level and groups the gaps by level. If your file lists VC2 codes, the level is chosen for you.</li>
  <li>Drag in your Word, PDF, PowerPoint or Excel files, or a whole folder of them (lesson planners, unit overviews, term plans, yearly overview spreadsheets). In Excel, every worksheet is read, one row at a time; a sheet named for a level (e.g. “Level 4”) helps the tool place the file. Add several to audit a term or a year together.</li></ol>
  <h3>How each kind of document is read</h3><ul><li><b>Plans</b> (yearly overviews, scope and sequences, curriculum area plans, unit and lesson plans): a VC2 code written where a unit is taught counts, and so do the words of the plan.</li><li><b>Curriculum area maps</b> (codes once across the top, units down the side): only the ticks or AS numbers in the grid count, never the codes listed across the top.</li><li><b>Coverage checklists</b> (every code listed once with a count or tick beside it, e.g. a COUNTIF tab): a code counts only when its count is above zero or it is ticked.</li><li>In Excel, each tab is judged on its own, so one workbook can hold a plan, a map and a checklist.</li></ul>
+ <h3>Excel workbooks with several tabs</h3><ul><li>Each tab is listed under the file with a button for each. Tabs that look like drafts, old copies, instructions or a later year (for example “2027 Draft”) are left out to start with; click a tab to include or leave it out.</li></ul>
+ <h3>VLP sequences for gaps</h3><ul><li>On the Summary, choose your VLP tools file (VLP Maths Tools – Primary or Secondary). Under each gap the audit lists the VLP sequences whose lessons carry that content description, and notes the ones the Department marks as minimal content in the VLPs. The list stays in this browser.</li></ul>
+ <h3>From the Map Creator</h3><ul><li>In the Curriculum Area Map Creator, <b>Audit this map</b> opens this audit with the new map and the plans it was made from already added, so the curriculum area map check runs straight away.</li></ul>
  <h3>Curriculum area maps</h3><ul><li>Upload a VCAA <b>curriculum area map</b> (the Word file) as it is. The tool reads which content descriptions each teaching and learning unit is ticked against, and the AS numbers beside them. Ticks can be Word check boxes, the ü tick in VCAA’s examples, or a typed x or Y; an AS number on its own also counts.</li><li>A school’s map kept in <b>Excel</b> (codes across the top, units down the side, a tab per level) works too. There, only a cell with an AS number counts (5, 15,16, 7-8 or 14b). A cell with “?” or anything else without a number isn’t counted; it is listed for checking.</li><li><b>Only ticks count.</b> The unit names, the content descriptions and codes listed across the top of the map, and the achievement standard sentences, are never counted as coverage. A blank template audits as nothing covered.</li><li>Upload the unit plans with the map and the <b>Curriculum area map check</b> lists content descriptions ticked on the map but not evident in the plans, and content evident in the plans but not ticked. The map’s achievement standard Y/N boxes appear beside each statement on Insights.</li><li>A map saved as a PDF can’t be read reliably (its ticks are lost), so it is left out with a message. Use the Word version.</li></ul>
  <h3>2. Read the summary</h3><ul><li>The tiles show how many content descriptions are covered, partly covered or not evident.</li><li>The strand table shows where coverage is thin.</li><li>The gap list groups missing content descriptions by sub-strand, with what to look for in a sequence that covers them.</li><li>With several files, <b>Which file covers what</b> shows each file’s contribution.</li></ul>
  <h3>3. Check and adjust</h3><ul><li>On <b>Content descriptions</b>, open <b>Show evidence</b> to see the lines in your document that matched.</li><li>Change any status with the drop-down: for example, ${SUBJ.key==='maths'?'number fact fluency taught in a separate daily block':'spelling taught in a separate block'} that isn’t in this document. Add a note to explain.</li><li><b>Not planned for this sequence</b> marks content you deliberately teach elsewhere, so it isn’t counted as a gap.</li>
@@ -2094,6 +2124,65 @@ async function buildTeamDocx(){
   return packDocx(body,false);
 }
 
+// ---------- VLP sequence suggestions for gaps ----------
+// The Department's curriculum coverage guidance marks these content descriptions "Minimal content in VLPs"; the VLP Maths
+// Repository has a supplementary lesson for each. (F–6 and 7–10A suggested learning programs, Version 1; VC2M10AA07 is
+// left out: the VLPs teach it in L10-S03.)
+const VLP_MINIMAL=new Set(('VC2M2SP01 VC2M3N07 VC2M3A01 VC2M3N09 VC2M3M05 VC2M4A01 VC2M4M03 VC2M4SP01 VC2M4SP02 VC2M5N04 VC2M5N09 VC2M5SP01 VC2M5ST01 '+
+  'VC2M6N02 VC2M6N04 VC2M6N08 VC2M6SP01 VC2M6SP03 VC2M7A04 VC2M7A06 VC2M8A04 VC2M8M04 VC2M9A06 VC2M9M05 VC2M9SP03 VC2M10N01 VC2M10A03 VC2M10A15 '+
+  'VC2M10A16 VC2M10M04 VC2M10ST04 VC2M10ASP01 VC2M10ASP02 VC2M10ASP03 VC2M10ASP04 VC2M10AST02 VC2M10AP02').split(' '));
+const VLP_STORE='vlp.audit.catalogue';
+let VLPCAT=null;try{VLPCAT=JSON.parse(localStorage.getItem(VLP_STORE)||'null');}catch(e){}
+// Read a VLP tools file (VLP Maths Tools Primary or Secondary, or a VLP English tool): each sequence's id, title and the
+// content description codes in its lessons. The tools keep their pages base64-encoded inside <script> tags, so every
+// such block is decoded and searched too.
+function vlpExtract(html){
+  const texts=[html];
+  for(const m of html.matchAll(/<script[^>]*>([A-Za-z0-9+\/=\s]{2000,})<\/script>/g)){try{texts.push(decodeURIComponent(escape(atob(m[1].replace(/\s+/g,'')))));}catch(e){}}
+  // nested once more (a tool page that itself embeds base64 data)
+  texts.slice(1).forEach(t=>{for(const m of t.matchAll(/<script[^>]*>([A-Za-z0-9+\/=\s]{2000,})<\/script>/g)){try{texts.push(decodeURIComponent(escape(atob(m[1].replace(/\s+/g,'')))));}catch(e){}}});
+  const units={};const ID=/\\?"(?:unitId|id)\\?"\s*:\s*\\?"(L(?:F|\d{1,2}A?)-S(?:\d{1,2}[A-Z]?|UPP))\\?"/g;
+  texts.forEach(t=>{const hits=[...t.matchAll(ID)];
+    hits.forEach((h,k)=>{const end=k+1<hits.length?hits[k+1].index:Math.min(t.length,h.index+200000);const chunk=t.slice(Math.max(0,h.index-1500),end);
+      const id=h[1];const u=units[id]=units[id]||{codes:[]};
+      const own=t.slice(h.index,end);
+      const tm=own.match(/\\?"seqTitle\\?"\s*:\s*\\?"([^"\\]{2,120})/)||chunk.match(/\\?"seqTitle\\?"\s*:\s*\\?"([^"\\]{2,120})/);if(tm&&!u.t)u.t=tm[1];
+      for(const c of own.matchAll(/\bVC2[EM](?:F|10A|\d{1,2})[A-Z]{1,3}\d{2}\b/g))if(!u.codes.includes(c[0]))u.codes.push(c[0]);});});
+  Object.keys(units).forEach(id=>{if(!units[id].codes.length)delete units[id];});
+  return units;
+}
+function vlpSaveCat(units,source){
+  const old=(VLPCAT&&VLPCAT.units)||{};VLPCAT={units:{...old,...units},sources:[...new Set([...((VLPCAT&&VLPCAT.sources)||[]),source])],at:new Date().toISOString()};
+  try{localStorage.setItem(VLP_STORE,JSON.stringify(VLPCAT));}catch(e){}
+}
+// The VLP sequences (from the loaded catalogue) whose lessons carry this code, with the level's own sequences first
+function vlpFor(cd){
+  const out=[];if(VLPCAT&&VLPCAT.units)Object.entries(VLPCAT.units).forEach(([id,u])=>{if(u.codes.includes(cd.code))out.push({id,t:u.t||''});});
+  const lvTag='L'+(cd.level==='F'?'F':String(cd.level).replace('10A','10'))+'-';
+  out.sort((a,b)=>(b.id.startsWith(lvTag)?1:0)-(a.id.startsWith(lvTag)?1:0)||a.id.localeCompare(b.id,undefined,{numeric:true}));
+  return {seqs:out.slice(0,3),minimal:VLP_MINIMAL.has(cd.code)};
+}
+function vlpLine(cd){
+  if(SUBJ.key!=='maths'&&SUBJ.key!=='english')return '';
+  const v=vlpFor(cd);const bits=[];
+  if(v.seqs.length)bits.push('VLP: '+v.seqs.map(s=>s.id+(s.t?' '+s.t:'')).join('; '));
+  if(v.minimal)bits.push((bits.length?'the':'The')+' Department marks this as minimal content in the VLPs (the VLP Maths Repository has a supplementary lesson for it)');
+  return bits.join('. ');
+}
+function vlpCard(){
+  if(SUBJ.key!=='maths'&&SUBJ.key!=='english')return '';
+  const n=VLPCAT&&VLPCAT.units?Object.keys(VLPCAT.units).length:0;
+  return `<div class="small muted vlpbar">${n?`<b>VLP suggestions</b> from ${n} VLP sequences (${esc(VLPCAT.sources.join(', '))}). <button class="link" id="vlpAdd">Add another VLP tools file</button> · <button class="link" id="vlpClear">Clear</button>`
+    :`<b>Suggest VLP sequences for gaps:</b> <button class="btn sm ghost" id="vlpAdd">Choose your VLP tools file</button> (VLP Maths Tools – Primary or Secondary). The tool reads which VLP sequences teach each content description and lists them under each gap. It stays in this browser.`}<input type="file" id="vlpIn" accept=".html,.htm" multiple class="hide"></div>`;
+}
+function bindVlp(){
+  const a=$('#vlpAdd'),i=$('#vlpIn'),c=$('#vlpClear');if(!a)return;
+  a.onclick=()=>i.click();
+  if(c)c.onclick=()=>{VLPCAT=null;try{localStorage.removeItem(VLP_STORE);}catch(e){}render();};
+  i.onchange=async()=>{let tot=0;for(const f of i.files){try{const u=vlpExtract(await f.text());const n=Object.keys(u).length;if(!n){toast(f.name+': no VLP sequences with content description codes found in this file.');continue;}vlpSaveCat(u,f.name.replace(/\.html?$/i,''));tot+=n;}catch(e){toast(f.name+': '+(e.message||e));}}
+    if(tot)toast(tot+' VLP sequences read. Suggestions now show under each gap.');i.value='';render();};
+}
+
 // ---------- subject switch ----------
 function renderSubj(){
   const others=Object.values(SUBJECTS).filter(x=>x.key!=='english'&&x.key!=='maths');const areas=[...new Set(others.map(x=>x.area))];
@@ -2111,8 +2200,22 @@ function boot(){
   renderSubj();
   analyse(); if(!R&&!['setup','help'].includes(S.tab))S.tab='setup';
   render();
+  if(location.hash==='#from-map-creator')fromMapCreator();
 }
-window.VCAudit={insights:()=>insights(),conf:r=>conf(r),buildGapXlsx:()=>buildGapXlsx(),buildTeamDocx:()=>buildTeamDocx(),SP,kv,CFG,analyse:()=>{analyse();return R;},get S(){return S;},set S(v){S=v;},readFile,render,buildDocx,reportHtml};
+// The Map Creator's "Audit this map": a fresh audit of the map and the plans it was built from
+async function fromMapCreator(){
+  history.replaceState(null,'',location.pathname);
+  let h=null;try{const db=await new Promise((res,rej)=>{const r=indexedDB.open('vc-handoff',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+    h=await new Promise((res,rej)=>{const tx=db.transaction('h','readwrite');const st=tx.objectStore('h');const g=st.get('pending');g.onsuccess=()=>{st.delete('pending');res(g.result);};g.onerror=()=>rej(g.error);});}catch(e){console.error(e);}
+  if(!h||Date.now()-h.at>30*60*1000){toast('Nothing to audit from the Map Creator. Build the map again, then click Audit this map.');return;}
+  S={...S,subject:h.subject,name:'Curriculum area map check',files:[],overrides:{},notes:{},fileLv:{},levels:[],scope:'year',tab:'setup'};setSubject(S.subject);renderSubj();
+  S.levels=LEVELS.filter(l=>(h.levels||[]).includes(l));
+  await addFiles(h.files.map(f=>new File([f.buf],f.name)));
+  if(!S.levels.length){S.tab='setup';render();toast('Choose the levels to audit, then run the audit.');return;}
+  analyse();S.tab='summary';save();render();window.scrollTo(0,0);
+  toast('Map and '+(h.files.length-1)+' plan'+(h.files.length===2?'':'s')+' added from the Map Creator.');
+}
+window.VCAudit={readXlsx,insights:()=>insights(),conf:r=>conf(r),buildGapXlsx:()=>buildGapXlsx(),buildTeamDocx:()=>buildTeamDocx(),SP,kv,CFG,analyse:()=>{analyse();return R;},get S(){return S;},set S(v){S=v;},readFile,render,buildDocx,reportHtml};
 document.addEventListener('DOMContentLoaded',boot);
 })();
 </script>
