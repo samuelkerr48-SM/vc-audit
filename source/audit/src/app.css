@@ -119,3 +119,4 @@ span.pc{display:inline-block;width:22px;border-radius:4px}
 .mapflag{color:#8a5200;font-weight:600;margin-top:2px}
 .tabpick{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:8px 0 2px;padding:6px 8px;background:#f4f8f9;border-radius:6px}.tabpick .chip.sm{padding:2px 8px;font-size:12px}.tabpick .chip:not(.on){text-decoration:line-through;opacity:.7}
 .vlpbar{margin:6px 0 10px;padding:6px 10px;background:#eef7f8;border-radius:6px}.lookfor.vlp{color:#1F1646}.link{background:none;border:0;color:#D40032;text-decoration:underline;cursor:pointer;padding:0;font:inherit}
+@media print{.toast,#toast{display:none!important}}

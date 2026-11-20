@@ -111,11 +111,11 @@ add(H2('Whole-school audits'),
   figure('countsfor.png', 15, 'Counts for: each file is tied to a level, and can be changed'),
   figure('bylevel.png', 15, 'Coverage by level in a whole-school Mathematics audit'));
 
-add(H2('VLP sequences for gaps'),
+add(H2('VLP lessons for gaps'),
   bullets([
-    '**Mathematics:** above **Gaps to plan for**, choose your *VLP Maths Tools – Primary* or *Secondary* file. The audit reads which VLP sequences teach each content description (from each lesson\'s codes) and lists up to three under each gap, the level\'s own sequences first.',
-    '**Minimal VLP content:** content descriptions the Department marks as having minimal content in the VLPs are noted, with a pointer to the supplementary lesson in the VLP Maths Repository.',
-    '**Stays in the browser:** the list is kept in the browser for later audits, and the suggestions go in the Word and printed reports.']),
+    '**Mathematics, Foundation to Level 10A:** under each gap, the VLP sequences and lesson numbers that teach it, the level\'s own sequences first, from the VLP Maths reference of units, lessons and content descriptions (VLP Maths Tools 19.7).',
+    '**Supplementary lessons** from the VLP Maths Repository are marked. Content taught only by supplementary lessons is noted as minimal content in the VLPs.',
+    '**Print VLP lessons for the gaps** (Summary and Report tabs) and **VLP lessons for the gaps (Word)** (Report tab) list each gap with every lesson\'s title and learning intention. The gap action plan has a VLP lessons column, and the Word and printed reports show the line under each gap.']),
   figure('g_vlp.png', 15, 'Gaps with the VLP sequences that teach them'));
 
 add(H2('How the audit decides'),

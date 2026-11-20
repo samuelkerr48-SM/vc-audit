@@ -261,13 +261,13 @@ async function droppedFiles(dt){const entries=[...(dt.items||[])].map(i=>i.webki
 
 // ---------- Excel gap action plan ----------
 async function buildGapXlsx(){
-  const sub=SUBJ.key!=='maths';const head=['Level','Strand'].concat(sub?['Sub-strand']:[],['Code','Content description','Status','Look for','Teacher note','Owner','Term','How we will address it','Progress']);
-  const widths=[11,13].concat(sub?[24]:[],[13,52,15,46,24,16,9,36,13]);
+  const sub=SUBJ.key!=='maths';const head=['Level','Strand'].concat(sub?['Sub-strand']:[],['Code','Content description','Status','Look for'].concat(vlpOn()?['VLP lessons']:[],['Teacher note','Owner','Term','How we will address it','Progress']));
+  const widths=[11,13].concat(sub?[24]:[],[13,52,15,46].concat(vlpOn()?[50]:[],[24,16,9,36,13]));
   const gaps=R.rows.filter(r=>r.status==='none'||r.status==='part').sort((a,b)=>LEVELS.indexOf(String(a.cd.level))-LEVELS.indexOf(String(b.cd.level))||SUBJ.strands.indexOf(a.cd.strand)-SUBJ.strands.indexOf(b.cd.strand)||(a.status==='none'?0:1)-(b.status==='none'?0:1));
   const col=n=>{let s='';n++;while(n){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;};
   const c=(r,i,t,s)=>`<c r="${col(i)}${r}" t="inlineStr" s="${s}"><is><t xml:space="preserve">${xe(t)}</t></is></c>`;
   const rows=[`<row r="1" ht="24" customHeight="1">${head.map((h,i)=>c(1,i,h,1)).join('')}</row>`];
-  gaps.forEach((g,k)=>{const r=k+2;const v=[LVNAME(String(g.cd.level)),g.cd.strand].concat(sub?[g.cd.substrand]:[],[g.cd.code,g.cd.description,STATUS[g.status],lookFor(g),S.notes[g.cd.code]||'','','','','Not started']);
+  gaps.forEach((g,k)=>{const r=k+2;const v=[LVNAME(String(g.cd.level)),g.cd.strand].concat(sub?[g.cd.substrand]:[],[g.cd.code,g.cd.description,STATUS[g.status],lookFor(g)].concat(vlpOn()?[vlpLine(g.cd).replace(/^VLP: /,'')]:[],[S.notes[g.cd.code]||'','','','','Not started']));
     const si=head.indexOf('Status');rows.push(`<row r="${r}">${v.map((t,i)=>c(r,i,t,i===si?(g.status==='none'?4:3):2)).join('')}</row>`);});
   const last=gaps.length+1,L=col(head.length-1),pc=col(head.length-1),tc=col(head.indexOf('Term'));
   const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${rows.join('')}</sheetData><autoFilter ref="A1:${L}${Math.max(last,2)}"/>${gaps.length?`<dataValidations count="2"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="${pc}2:${pc}${last}"><formula1>"Not started,In progress,Done"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="${tc}2:${tc}${last}"><formula1>"Term 1,Term 2,Term 3,Term 4"</formula1></dataValidation></dataValidations>`:''}<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;

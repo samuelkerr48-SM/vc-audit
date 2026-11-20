@@ -169,10 +169,10 @@ content('Check the evidence before acting', [
 
 content('Gaps, with the VLP sequences that teach them', [
   '**Gaps to plan for** lists each missing content description with what to look for',
-  'Choose your VLP Maths Tools file once: each gap lists the VLP sequences whose lessons teach it',
+  'Each gap lists the VLP sequences and lessons that teach it (Foundation to Level 10A); print them with titles and learning intentions',
   'Content the Department marks as minimal in the VLPs is noted, with the Repository’s supplementary lesson',
   'Download the **gap action plan** (Excel) to give each gap an owner and a term'], img='g_vlp.png',
-  n='3 min. The VLP list stays in the browser and goes in the Word report.')
+  n='3 min. Show Print VLP lessons for the gaps. The same list is on the Report tab as a Word document, and in the gap action plan.')
 
 divider('Curriculum area maps', 'Make one from your plans, then check it', '30 sec.')
 

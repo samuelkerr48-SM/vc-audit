@@ -103,7 +103,7 @@ add(H2('5. Read the summary'),
     '**Coverage by strand and sub-strand** shows where coverage is thin. With several levels, **Coverage by level** shows each level\'s coverage.',
     '**Curriculum area map check** (when a map is uploaded with plans): content ticked on the map but not evident in the plans, and content evident in the plans but not ticked on the map. Cells marked "?" or without an AS number are listed to check.',
     '**Gaps to plan for** lists each missing content description with **Look for**: what a plan that covers it would include.',
-    '**VLP sequences for gaps** (Mathematics): click **Choose your VLP tools file** above the gaps and choose your *VLP Maths Tools – Primary* or *Secondary* file. Each gap then lists the VLP sequences whose lessons teach it, and notes content the Department marks as minimal in the VLPs (the VLP Maths Repository has a supplementary lesson for each). The suggestions also go in the Word and printed reports.']),
+    '**VLP lessons for gaps** (Mathematics): under each gap, the VLP sequences and lesson numbers that teach it, Foundation to Level 10A (from the VLP Maths reference of units, lessons and content descriptions). Supplementary lessons from the VLP Maths Repository are marked, and content taught only by supplementary lessons is noted as minimal in the VLPs. **Print VLP lessons for the gaps** lists every lesson\'s title and learning intention for each gap']),
   figure('g_vlp.png', 15, 'Gaps to plan for, with the VLP sequences that teach each one'),
   figure('g_summary.png', 15, 'The summary tiles'),
   figure('g_mapcheck.png', 15, 'Curriculum area map check: a map uploaded with four unit plans'));
@@ -145,6 +145,7 @@ add(H2('8. Make the reports'),
     ['Print or save as PDF', 'The same report through the browser\'s print window'],
     ['Gap action plan (Excel)', 'Every gap with columns for an owner, a term, how it will be addressed and progress'],
     ['Team summaries (Word)', 'One page per level: its coverage, first gaps and what to look for. Ready for a PLC'],
+    ['VLP lessons for the gaps (Word, or Print)', 'Mathematics: each gap with every VLP lesson that teaches it (sequence, lesson, title, learning intention). The gap action plan also has a VLP lessons column'],
     ['Save this audit to open later', 'A small file that keeps your status changes and notes. Open it again from **Set up › Open a saved audit**, or send it to a colleague']], [1, 2.6]),
   figure('g_report.png', 15, 'The Report tab'));
 

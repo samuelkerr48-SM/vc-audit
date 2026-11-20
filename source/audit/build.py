@@ -9,7 +9,7 @@ def js(p):
 jszip=js(V+'jszip-3.10.1/package/dist/jszip.min.js')
 pdf=js(V+'pdfjs-dist-3.11.174/package/legacy/build/pdf.min.js')
 worker=base64.b64encode(open(V+'pdfjs-dist-3.11.174/package/legacy/build/pdf.worker.min.js','rb').read()).decode()
-conc=js('src/concepts-en.js'); concm=js('src/concepts-ma.js'); app=js('src/app.js').replace('/*MAP*/',js('src/map.js')).replace('/*KW*/',js('src/kw.js')).replace('/*PLUS*/',js('src/plus.js')).replace('/*VLP*/',js('src/vlp.js'));
+conc=js('src/concepts-en.js'); concm=js('src/concepts-ma.js'); app=js('src/app.js').replace('/*MAP*/',js('src/map.js')).replace('/*KW*/',js('src/kw.js')).replace('/*PLUS*/',js('src/plus.js')).replace('/*VLP*/',js('src/vlpref.js')+js('src/vlp.js'));
 html=f'''<!DOCTYPE html>
 <html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VC Curriculum Audit</title>
