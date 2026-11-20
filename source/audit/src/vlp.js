@@ -11,17 +11,27 @@ let VLPCAT=null;try{VLPCAT=JSON.parse(localStorage.getItem(VLP_STORE)||'null');}
 // content description codes in its lessons. The tools keep their pages base64-encoded inside <script> tags, so every
 // such block is decoded and searched too.
 function vlpExtract(html){
-  const texts=[html];
-  for(const m of html.matchAll(/<script[^>]*>([A-Za-z0-9+\/=\s]{2000,})<\/script>/g)){try{texts.push(decodeURIComponent(escape(atob(m[1].replace(/\s+/g,'')))));}catch(e){}}
-  // nested once more (a tool page that itself embeds base64 data)
-  texts.slice(1).forEach(t=>{for(const m of t.matchAll(/<script[^>]*>([A-Za-z0-9+\/=\s]{2000,})<\/script>/g)){try{texts.push(decodeURIComponent(escape(atob(m[1].replace(/\s+/g,'')))));}catch(e){}}});
-  const units={};const ID=/\\?"(?:unitId|id)\\?"\s*:\s*\\?"(L(?:F|\d{1,2}A?)-S(?:\d{1,2}[A-Z]?|UPP))\\?"/g;
-  texts.forEach(t=>{const hits=[...t.matchAll(ID)];
-    hits.forEach((h,k)=>{const end=k+1<hits.length?hits[k+1].index:Math.min(t.length,h.index+200000);const chunk=t.slice(Math.max(0,h.index-1500),end);
-      const id=h[1];const u=units[id]=units[id]||{codes:[]};
-      const own=t.slice(h.index,end);
-      const tm=own.match(/\\?"seqTitle\\?"\s*:\s*\\?"([^"\\]{2,120})/)||chunk.match(/\\?"seqTitle\\?"\s*:\s*\\?"([^"\\]{2,120})/);if(tm&&!u.t)u.t=tm[1];
-      for(const c of own.matchAll(/\bVC2[EM](?:F|10A|\d{1,2})[A-Z]{1,3}\d{2}\b/g))if(!u.codes.includes(c[0]))u.codes.push(c[0]);});});
+  // The VLP Maths Tools keep each tool's page base64-encoded in <script id="tool-…">; the Repository page holds the
+  // data as JSON in <script id="vlpData"> ({"units/L03-S02": {unitId, seqTitle, lessons, lessonCodes:{n:[codes]}}, …}).
+  const pages=[html];
+  const b64=(src,id)=>{const i=src.indexOf('id="'+id+'"');if(i<0)return null;const s=src.indexOf('>',i)+1,e=src.indexOf('<\/script>',s);
+    try{const bin=atob(src.slice(s,e).replace(/\s+/g,''));const u=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u[k]=bin.charCodeAt(k);return new TextDecoder().decode(u);}catch(err){return null;}};
+  for(const m of html.matchAll(/<script[^>]{0,80}id="(tool-[\w-]+)"/g)){const t=b64(html,m[1]);if(t)pages.push(t);}
+  const units={};
+  const add=(id,t,codes,added)=>{const u=units[id]=units[id]||{codes:[]};if(t&&!u.t)u.t=t;codes.forEach(c=>{if(c&&/^VC2[EM]/.test(c)&&!u.codes.includes(c))u.codes.push(c);});
+    // codes taught only by lessons added to the sequence (supplementary lessons, not VLP lessons)
+    if(added){u.added=(u.added||[]);added.forEach(c=>{if(c&&/^VC2[EM]/.test(c)&&!u.added.includes(c))u.added.push(c);});}};
+  pages.forEach(t=>{const i=t.indexOf('id="vlpData"');if(i<0)return;const s=t.indexOf('>',i)+1,e=t.indexOf('<\/script>',s);let d;try{d=JSON.parse(t.slice(s,e));}catch(err){return;}
+    Object.entries(d).forEach(([k,u])=>{if(!/^units\//.test(k)||!u)return;const id=u.unitId||k.slice(6);
+      const vlp=Object.entries(u.lessonCodes||{}).filter(([n])=>!(u.lessons||[]).some(l=>String(l.num)===n&&l.code)).flatMap(([,c])=>c);
+      const added=(u.lessons||[]).flatMap(l=>String(l.code||'').split(/[ ,;]+/)).filter(c=>c&&!vlp.includes(c));
+      add(id,u.supplementary||/SUPP$/.test(id)?'Supplementary lessons':u.seqTitle,vlp.concat(added),added);});});
+  if(!Object.keys(units).length){
+    // another layout: every "unitId"/"id" value like L03-S04, with the codes up to the next one
+    const ID=/\\?"(?:unitId|id)\\?"\s*:\s*\\?"(L(?:F|\d{1,2}A?)-S(?:\d{1,2}[A-Z]?|UPP))\\?"/g;
+    pages.forEach(t=>{const hits=[...t.matchAll(ID)];
+      hits.forEach((h,k)=>{const end=k+1<hits.length?hits[k+1].index:Math.min(t.length,h.index+200000);const own=t.slice(h.index,end);
+        const tm=own.match(/\\?"seqTitle\\?"\s*:\s*\\?"([^"\\]{2,120})/);add(h[1],tm&&tm[1],[...own.matchAll(/\bVC2[EM](?:F|10A|\d{1,2})[A-Z]{1,3}\d{2}\b/g)].map(x=>x[0]));});});}
   Object.keys(units).forEach(id=>{if(!units[id].codes.length)delete units[id];});
   return units;
 }
@@ -31,7 +41,7 @@ function vlpSaveCat(units,source){
 }
 // The VLP sequences (from the loaded catalogue) whose lessons carry this code, with the level's own sequences first
 function vlpFor(cd){
-  const out=[];if(VLPCAT&&VLPCAT.units)Object.entries(VLPCAT.units).forEach(([id,u])=>{if(u.codes.includes(cd.code))out.push({id,t:u.t||''});});
+  const out=[];if(VLPCAT&&VLPCAT.units)Object.entries(VLPCAT.units).forEach(([id,u])=>{if(u.codes.includes(cd.code))out.push({id,t:u.t||'',added:/SUPP$/.test(id)||(u.added||[]).includes(cd.code)});});
   const lvTag='L'+(cd.level==='F'?'F':String(cd.level).replace('10A','10'))+'-';
   out.sort((a,b)=>(b.id.startsWith(lvTag)?1:0)-(a.id.startsWith(lvTag)?1:0)||a.id.localeCompare(b.id,undefined,{numeric:true}));
   return {seqs:out.slice(0,3),minimal:VLP_MINIMAL.has(cd.code)};
@@ -39,8 +49,8 @@ function vlpFor(cd){
 function vlpLine(cd){
   if(SUBJ.key!=='maths'&&SUBJ.key!=='english')return '';
   const v=vlpFor(cd);const bits=[];
-  if(v.seqs.length)bits.push('VLP: '+v.seqs.map(s=>s.id+(s.t?' '+s.t:'')).join('; '));
-  if(v.minimal)bits.push((bits.length?'the':'The')+' Department marks this as minimal content in the VLPs (the VLP Maths Repository has a supplementary lesson for it)');
+  if(v.seqs.length)bits.push('VLP: '+v.seqs.map(s=>s.id+(s.t?' '+s.t:'')+(s.added&&!/SUPP$/.test(s.id)?' (supplementary lesson added to the sequence)':'')).join('; '));
+  if(v.minimal)bits.push((bits.length?'Minimal':'The Department marks this as minimal')+' content in the VLPs'+(v.seqs.some(s=>s.added)?'':' (the VLP Maths Repository has a supplementary lesson for it)'));
   return bits.join('. ');
 }
 function vlpCard(){
