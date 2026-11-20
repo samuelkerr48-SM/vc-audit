@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Curriculum Area Map Creator</title>
+<style>
+:root{--navy:#1F1646;--crimson:#D40032;--mint:#B8E9EB;--mint2:#E8F7F8;--ink:#1d1b2b;--muted:#5d5a70;--line:#dcdbe6;--bg:#f6f6fa;--card:#fff;--teal:#0f7b6c;--tealbg:#dff3ef;--amber:#b26a00;--amberbg:#fff1d6}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Calibri,Arial,sans-serif}
+button,input,select{font:inherit}
+button{cursor:pointer}
+header.top{background:var(--navy);color:#fff;padding:12px 22px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.brandrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brandrow h1{font-size:20px;margin:0;font-weight:700}
+.pill{display:inline-block;background:var(--crimson);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+.sub{font-size:13px;opacity:.85}
+.subjsel{margin-left:auto;display:flex;gap:6px;align-items:center}
+.subjsel button,#helpBtn{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:6px;padding:4px 12px;font-size:13px}
+.subjsel button.on{background:#fff;color:var(--navy);font-weight:700}
+.subjsel select{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:6px;padding:4px 8px;font-size:13px}.subjsel select option{color:#1F1646}.subjsel select.on{background:#fff;color:var(--navy);font-weight:700}
+main{max-width:1500px;margin:0 auto;padding:18px 22px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(20,10,60,.05)}
+.card h2{margin:0 0 6px;font-size:18px;color:var(--navy);display:flex;align-items:center;gap:10px}
+.card h3{font-size:15px;margin:14px 0 6px;color:var(--navy)}
+.step{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--crimson);color:#fff;font-size:14px}
+.muted{color:var(--muted)}.small{font-size:13px}
+.drop{display:block;border:2px dashed #b9b6cc;border-radius:10px;padding:22px;text-align:center;background:var(--mint2);cursor:pointer;margin:10px 0}
+.drop.over{border-color:var(--crimson);background:#fff}
+.drop input{display:none}
+.spin{margin-left:12px;color:var(--crimson);font-weight:600}
+table.files{width:100%;border-collapse:collapse;margin-top:6px}
+table.files th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:4px 6px}
+table.files td{border-bottom:1px solid var(--line);padding:7px 6px;vertical-align:top;font-size:14px}
+table.files select{max-width:330px;margin:0 6px 4px 0;padding:3px}
+.x{border:0;background:none;font-size:20px;color:var(--muted)}
+.x:hover{color:var(--crimson)}
+.link{background:none;border:0;color:var(--navy);text-decoration:underline;padding:0;cursor:pointer;font-size:inherit}
+.tpl{margin:12px 0 0}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 10px;border-bottom:2px solid var(--navy)}
+.tab{border:1px solid var(--line);border-bottom:0;background:#f0eff6;border-radius:7px 7px 0 0;padding:6px 11px;font-size:13px;color:var(--navy)}
+.tab.on{background:var(--navy);color:#fff;font-weight:700}
+.tab.empty{color:#9a97ad}
+.badge{display:inline-block;min-width:18px;border-radius:9px;background:var(--crimson);color:#fff;font-size:11px;padding:0 5px;margin-left:3px}
+.sum{margin:6px 0}.amber{color:var(--amber)}
+.btn{border:1px solid var(--navy);background:#fff;color:var(--navy);border-radius:7px;padding:7px 14px;font-weight:600}
+.btn.sm{padding:3px 9px;font-size:13px}
+.btn.primary{background:var(--navy);color:#fff}
+.btn:hover{filter:brightness(1.1)}
+.key{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:4px 0 8px;color:var(--muted)}
+.key .c{display:inline-block;min-width:34px;text-align:center;border-radius:4px;padding:1px 4px;font-weight:700;font-size:12px}
+.gridwrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px}
+table.grid{border-collapse:separate;border-spacing:0;font-size:13px}
+table.grid th{position:sticky;top:0;background:#fff;z-index:2;border-bottom:2px solid var(--line);padding:4px}
+table.grid th.code{writing-mode:vertical-rl;transform:rotate(180deg);height:92px;font-weight:600;font-size:12px;border-bottom:4px solid var(--sc);white-space:nowrap;cursor:help}
+table.grid th.code.gap{color:var(--crimson)}
+table.grid td{border-bottom:1px solid #eeedf4;padding:2px}
+table.grid td.num,table.grid th.num{position:sticky;left:0;background:#fff;z-index:1;width:28px;text-align:center;color:var(--muted)}
+table.grid th.num{z-index:3}
+table.grid td.uname,table.grid th.uname{position:sticky;left:28px;background:#fff;z-index:1;width:290px;min-width:290px;max-width:290px;text-align:left;border-right:1px solid var(--line)}
+table.grid th.uname{z-index:3}
+td.uname input{width:100%;border:1px solid transparent;border-radius:4px;padding:3px 5px;font-weight:600;color:var(--navy);background:transparent}
+td.uname input:hover,td.uname input:focus{border-color:var(--line);background:#fff}
+.meta{display:flex;align-items:center;gap:6px;padding:0 5px;white-space:nowrap}
+.meta select{padding:0 2px;font-size:12px}
+.src{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.ops button{border:0;background:none;color:var(--muted);padding:0 2px}
+.ops button:hover{color:var(--crimson)}
+td.c{min-width:38px;height:30px;text-align:center;cursor:pointer;font-weight:700;font-size:12px;border-left:1px solid #f1f0f6}
+td.c:hover{outline:2px solid var(--navy);outline-offset:-2px}
+.c.code{background:var(--navy);color:#fff}
+.c.ev{background:var(--tealbg);color:var(--teal)}
+.c.poss{color:var(--amber);background:repeating-linear-gradient(45deg,#fff,#fff 4px,var(--amberbg) 4px,var(--amberbg) 8px);border:1px dashed var(--amber)}
+.c.user{background:#fde4ea;color:var(--crimson);box-shadow:inset 0 0 0 1px var(--crimson)}
+.c.cleared{background:#fafafa}
+.gaps{background:#fdf2f5;border:1px solid #f4c7d3;border-radius:8px;padding:6px 12px 10px;margin-top:10px}
+.gaps h3{color:var(--crimson);margin:6px 0}
+.codechip{display:inline-block;font-family:Consolas,monospace;font-size:12px;background:#ecebf2;border-radius:4px;padding:0 5px;margin-right:4px}
+.ok{color:var(--teal);font-weight:600}
+.note{background:var(--amberbg);border-left:4px solid var(--amber);padding:8px 12px;border-radius:6px}
+.warncard{border-color:#f0c36d;background:#fffaf0}
+.nlrow{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid #f1e7cf}
+.dl{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin:10px 0}
+.dl input#fname{width:360px;padding:5px 7px;border:1px solid var(--line);border-radius:6px}
+.chk{display:flex;gap:6px;align-items:center}
+.pop{position:absolute;z-index:50;background:#fff;border:1px solid var(--navy);border-radius:10px;box-shadow:0 8px 30px rgba(20,10,60,.25);padding:12px 14px;width:430px;max-width:94vw;display:grid;gap:8px}
+.pop select{width:100%;margin-top:3px}
+.pop .why{color:var(--muted)}
+.pop .row2{display:flex;gap:6px;flex-wrap:wrap}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:9px 16px;border-radius:8px;z-index:90;max-width:90vw;box-shadow:0 4px 18px rgba(0,0,0,.25)}
+#help{max-width:1500px;margin:14px auto 0;padding:0 22px}
+#help .card{background:var(--mint2)}
+#help li{margin:3px 0}
+footer{text-align:center;font-size:12px;color:var(--muted);padding:10px}
+</style></head><body>
+<header class="top"><div class="brandrow"><h1>Curriculum Area Map Creator</h1><span class="pill">Victorian Curriculum 2.0</span><span class="sub">Build your curriculum area map from your plans</span><div class="subjsel" id="subj"></div><button id="helpBtn">How it works</button></div></header>
+<div id="help" hidden><div class="card">
+<h2>How it works</h2>
+<ol>
+<li><b>Add your plans.</b> The tool finds the teaching and learning units in each file:
+<ul><li><b>Yearly overviews and scopes and sequences</b> in Excel or Word: a column headed Unit, Topic or Focus gives one unit per row. Term and level come from the rows, columns or tab names (“Term 2”, “Year 4”).</li>
+<li><b>Curriculum area plans</b> (weeks across the top, a row per level and semester, as in VCAA’s template): each unit in the grid. Calendar items such as camp or NAPLAN are left out.</li>
+<li><b>Headed documents:</b> a section under each heading such as “Weeks 1–3: Fractions” or “Unit 4”.</li>
+<li><b>Unit plans</b> are read as one unit. With an overview, a unit plan that matches an overview unit (by unit number, such as 3.4, or by title) adds its detail to that unit.</li></ul>
+Change how a file is read under <b>Read it as</b>.</li>
+<li><b>Check the map.</b> For each unit, a content description is ticked when its VC2 code is written in the plan, or when the plan’s words clearly match it. Where a plan lists codes, its words alone don’t add ticks. Weaker matches show as <b>?</b>: tick the ones you agree with. Click any cell to tick, clear or change the achievement standard.</li>
+<li><b>The achievement standard number</b> in each cell comes from your template’s list (N1, A7, Sp13 …). It is the extract VCAA links to that content description; where several are linked, the one whose words the unit shares most.</li>
+<li><b>Download</b> your template, filled in. Nothing is uploaded: files are read in this browser.</li>
+</ol>
+<p class="small muted">Every learning area has a built-in template in the same layout as the Mathematics one: a tab per level (or band of levels, such as Levels 3 and 4 for Science and the Humanities), and the achievement standard numbered sentence by sentence and labelled by strand or mode (SL, RV and W for English; SU, SI and SHE for Science). Choose a learning area other than Mathematics or English from <b>Other learning areas</b>. Mathematics and English match plans on curriculum concepts and VCAA’s wording; the other learning areas on VCAA’s wording and elaborations, so check their possible matches. Use your own template (same layout: VC2 codes across, Unit Title and Semester, the AS key below) with “use a different template”.</p>
+</div></div>
+<main id="view"></main>
+<div id="toast" hidden></div>
+<footer>Curriculum Area Map Creator · Victorian Curriculum F–10 Version 2.0 (VCAA) · Runs in your browser: no files leave this computer.</footer>
+<!--SCRIPTS-->
+
+</body></html>
