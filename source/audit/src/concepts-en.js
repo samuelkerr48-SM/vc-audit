@@ -282,9 +282,9 @@ const EN_TAXA = {
   textTypes: {title:'Text types', note:'Texts read, viewed or created in the sequence.', groups:[
     ['Imaginative', [
       // writing narratives (not analysing one: "narrative voice", "narrative techniques" are text study, not a text type written)
-      ['Narrative writing / short story', /short stor(y|ies)|\bwrit\w*\s+(a|an|their|own|our|the|your)?\s*(\w+\s+){0,2}narratives?\b|\bnarrative writing\b|\b(personal|imaginative|recount) narratives?\b|\bimaginative (texts?|writing)\b|\bown narratives?\b|orientation\W{1,3}complication/i],
+      ['Narrative writing / short story', /short stor(y|ies)|(?<!\b(historical|absorbing|gripping|powerful|verse|graphic|engaging|compelling|moving|beautiful|the novel's|this|its|the)\s)\bnarratives?\b(?!\s+(voice|techniques?|devices?|perspectives?|point of view|arcs?|elements?|conventions?|features?|style|poems?|poetry|non-?fiction|hooks?|structures? of the (novel|text)|in the (novel|text)))|\bwrit\w*\s+(a|an|their|own|our|the|your)?\s*(\w+\s+){0,2}stor(y|ies)\b|\bstory writing\b|\bcreative writing\b|\bimaginative (texts?|writing)\b|orientation\W{1,3}complication/i],
       // a novel or other extended text study: the word, or an extended study of a title, e.g. "Skellig (25 lessons)"
-      ['Novel / text study', /\bnovels?\b|novel study|class novel|\btext study\b|\bclass text\b|chapter books?|\bchapters?\s+\d|\(\s*([2-9]\d)\s+lessons?\s*\)/i],
+      ['Novel / text study', /\bnovels?\b|novel study|class novel|\btext study\b|\bclass text\b|chapter books?|\bchapters?\s+\d|\b(book|literature|author) stud(y|ies)\b|\bliterature circles?\b|\bclass read(er)?\b|\(\s*([2-9]\d)\s+lessons?\s*\)/i],
       ['Picture book', /picture books?/i],
       ['Poetry', /\bpoe(m|ms|try)\b|haiku|limerick|free verse|sonnet|ballad|cinquain|acrostic/i],
       ['Verse novel', /verse novel|novel in verse/i],
