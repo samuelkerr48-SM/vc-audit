@@ -55,28 +55,30 @@ const CONFHELP={'ticked on the map':'Ticked for a unit on the curriculum area ma
 function insights(){
   if(R.ins)return R.ins;const ins={};const lv=LEVELS.filter(l=>S.levels.includes(l));
   const elig={};lv.forEach(l=>elig[l]=eligible(l));const segN=E=>E.reduce((n,i)=>n+S.files[i].segs.length,0);
-  // progression across levels
-  const prog=[];
-  if(lv.length>1)SUBJ.concepts.filter(c=>!c.opt).forEach(c=>{const h=R.H[c.id];
-    const cells=lv.map(l=>{const exp=SUBJ.cds.some(cd=>String(cd.level)===l&&cd.concepts.includes(c.id));const E=elig[l];if(!E.length)return {l,exp,st:'nofile'};
-      const w=E.reduce((k,i)=>k+(h.perFileW[i]||0),0);const [tf,th]=thresholds(segN(E));return {l,exp,st:w>=tf?'strong':w>=th?'some':'none'};});
-    if(cells.filter(x=>x.exp).length<2)return;const any=cells.some(x=>x.exp&&(x.st==='strong'||x.st==='some'));
-    const breaks=cells.filter(x=>x.exp&&x.st==='none'&&any).map(x=>x.l);
-    const strands={};SUBJ.cds.forEach(cd=>{if(cd.concepts.includes(c.id))strands[cd.strand]=(strands[cd.strand]||0)+1;});
-    prog.push({c,cells,breaks,strand:Object.entries(strands).sort((a,b)=>b[1]-a[1])[0][0]});});
-  // Learning areas without a concept library: follow each sub-strand across levels, from content description statuses
-  if(lv.length>1&&SUBJ.kwOnly){const subs={};SUBJ.cds.forEach(cd=>{(subs[cd.substrand]=subs[cd.substrand]||{strand:cd.strand,n:0}).n++;});
-    Object.entries(subs).forEach(([sub,o])=>{const cells=lv.map(l=>{const rs=R.rows.filter(r=>String(r.cd.level)===l&&r.cd.substrand===sub);const exp=rs.length>0;if(!exp)return {l,exp};if(!elig[l].length)return {l,exp,st:'nofile'};
-        const c=rs.filter(r=>r.status==='cov'||r.status==='na').length,pt=rs.filter(r=>r.status==='part').length;return {l,exp,st:c>=rs.length/2?'strong':(c||pt)?'some':'none',rs};});
-      if(cells.filter(x=>x.exp).length<2)return;const any=cells.some(x=>x.exp&&(x.st==='strong'||x.st==='some'));const breaks=cells.filter(x=>x.exp&&x.st==='none'&&any).map(x=>x.l);
-      const miss=breaks.length?cells.find(x=>x.l===breaks[0]).rs[0].cd:null;
-      prog.push({c:{label:sub,hint:miss?('VCAA example for '+LVNAME(breaks[0])+': '+((miss.el||[])[0]||miss.description)):''},cells,breaks,strand:o.strand});});}
+  // progression across levels, from the audit's own statuses: one row per sub-strand (or strand), one cell per level
+  const prog=[];const subOf=cd=>cd.substrand&&cd.substrand!==cd.strand?cd.substrand:cd.strand;
+  if(lv.length>1){const subs=[];const seenS=new Set();
+    SUBJ.cds.forEach(cd=>{const k=subOf(cd);if(!seenS.has(k)){seenS.add(k);subs.push({k,strand:cd.strand});}});
+    subs.forEach(({k,strand})=>{const cells=lv.map(l=>{const rs=R.rows.filter(r=>String(r.cd.level)===l&&subOf(r.cd)===k);
+        if(!rs.length)return {l,exp:false};if(!elig[l].length)return {l,exp:true,st:'nofile',rs,n:rs.length,cov:0,part:0};
+        const cov=rs.filter(r=>r.status==='cov'||r.status==='na').length,part=rs.filter(r=>r.status==='part').length;
+        return {l,exp:true,rs,n:rs.length,cov,part,st:cov===rs.length?'strong':(cov||part)?'some':'none'};});
+      if(cells.filter(x=>x.exp).length<2)return;const any=cells.some(x=>x.exp&&(x.st==='strong'||x.st==='some'));
+      const breaks=cells.filter(x=>x.exp&&x.st==='none'&&any).map(x=>x.l);
+      prog.push({c:{label:k},cells,breaks,strand});});}
   ins.prog=prog;ins.breaks=prog.filter(p=>p.breaks.length);
   // emphasis and thin coverage
   const sets={};SUBJ.strands.forEach(s=>sets[s]=new Set());
   R.rows.forEach(r=>{const set=new Set();(r.evid||[]).forEach(u=>{for(const fi in u.idx)u.idx[fi].forEach(si=>set.add(fi+':'+si));});r.mentions=set.size;(sets[r.cd.strand]=sets[r.cd.strand]||new Set());set.forEach(k=>sets[r.cd.strand].add(k));});
   const totM=SUBJ.strands.reduce((n,s)=>n+sets[s].size,0)||1;
   ins.emph=SUBJ.strands.map(s=>{const n=R.rows.filter(r=>r.cd.strand===s).length;const plan=sets[s].size/totM,cur=n/R.rows.length;return {s,plan,cur,ratio:cur?plan/cur:0};});
+  ins.check=R.rows.filter(r=>r.status==='cov'&&!r.overridden&&!r.listed&&!r.mapped&&!(r.school&&r.schoolLift)&&(r.mentions<=2||['passing mention only','only in a list','trace only','some evidence'].includes(conf(r)))).sort((a,b)=>a.mentions-b.mentions);
+  // foundations (Maths): each gap with the content description it builds on at the level below
+  ins.found=[];if(SUBJ.key==='maths'&&typeof MATHS_PREV!=='undefined'){const by=Object.fromEntries(R.rows.map(r=>[r.cd.code,r]));
+    R.rows.filter(r=>r.status==='none'||r.status==='part').forEach(r=>{const pre=(MATHS_PREV[r.cd.code]||[]);if(!pre.length)return;
+      const ps=pre.map(c=>({c,r:by[c],cd:SUBJ.cdBy[c]}));const inAudit=ps.filter(x=>x.r);
+      const kind=!inAudit.length?'out':inAudit.some(x=>x.r.status==='none')?'shaky':inAudit.every(x=>x.r.status==='cov'||x.r.status==='na')?'ready':'partly';
+      ins.found.push({r,ps,kind});});}
   ins.thin=R.rows.filter(r=>(r.status==='cov'||r.status==='part')&&!r.overridden&&r.mentions<=2).sort((a,b)=>a.mentions-b.mentions);
   // when in the year
   let known=0,tot=0;S.files.forEach(f=>{const t=meta(f).term;tot+=t.length;known+=t.filter(Boolean).length;});ins.termShare=tot?known/tot:0;
@@ -114,7 +116,9 @@ function insights(){
 }
 // short lines for the reports
 function insightLines(){const I=insights();const out=[];
-  if(I.breaks.length)out.push(['Breaks in progression',I.breaks.map(p=>p.c.label+': no evidence at '+p.breaks.map(LVNAME).join(', '))]);
+  if(I.breaks.length)out.push(['Breaks in progression',I.breaks.map(p=>p.c.label+': none evident at '+p.breaks.map(LVNAME).join(', '))]);
+  const sh=(I.found||[]).filter(f=>f.kind==='shaky');if(sh.length)out.push(['Gaps whose lead-in is also missing',sh.slice(0,25).map(f=>f.r.cd.code+' builds on '+f.ps.filter(x=>x.r&&x.r.status==='none').map(x=>x.c).join(', ')+': '+f.r.cd.description)]);
+  if((I.check||[]).length)out.push(['Check these first (covered on little evidence)',I.check.slice(0,25).map(r=>r.cd.code+' ('+r.mentions+' mention'+(r.mentions===1?'':'s')+'): '+r.cd.description)]);
   const em=I.emph.filter(e=>e.cur&&(e.ratio>1.6||e.ratio<.5));if(em.length)out.push(['Emphasis',em.map(e=>e.s+': '+Math.round(e.plan*100)+'% of what the plans mention, '+Math.round(e.cur*100)+'% of the curriculum ('+(e.ratio>1?'more':'less')+' than its share)')]);
   if(I.thin.length)out.push(['Covered but barely mentioned',I.thin.slice(0,25).map(r=>r.cd.code+' ('+r.mentions+' mention'+(r.mentions===1?'':'s')+'): '+r.cd.description)]);
   if(I.termStrand){const l=[];if(I.noTerm.length)l.push('No evidence of '+I.noTerm.join('; ')+'.');if(I.lateOnly.length)l.push(I.lateOnly.length+' content description'+(I.lateOnly.length>1?'s appear':' appears')+' only in Term 4: '+I.lateOnly.map(r=>r.cd.code).join(', ')+'.');if(l.length)out.push(['When in the year',l]);}
@@ -138,16 +142,27 @@ function vInsights(){
   const asCard=`<div class="card"><h2>Achievement standards</h2><p class="small muted">Teachers report against the achievement standards. Each statement is linked to the content descriptions that build it, and takes its status from them.</p>${I.as.length?`<div class="tiles"><div class="tile cov"><div class="big">${I.as.filter(a=>a.status==='cov').length}<span style="font-size:16px"> / ${I.as.length}</span></div><div class="lab">statements with all linked content covered</div></div><div class="tile part"><div class="big">${I.as.filter(a=>a.status==='part').length}</div><div class="lab">partly</div></div><div class="tile none"><div class="big">${I.as.filter(a=>a.status==='none').length}</div><div class="lab">not evident</div></div></div>
     <details ${I.as.length<=30?'open':''}><summary>Show every statement</summary><table><tr><th>Level</th><th>Strand</th><th>Achievement standard statement</th><th>Linked content</th><th>Status</th>${I.as.some(a=>a.map)?'<th>Map Y/N</th>':''}</tr>${I.as.map(a=>`<tr><td class="small">${LVNAME(a.l)}</td><td class="small">${a.st.strand}</td><td>${esc(a.st.text)}</td><td class="small">${a.loose?'<span class="muted">'+a.loose+'</span>':a.rows.map(r=>`<span class="code" title="${esc(STATUS[r.status])}" style="color:var(--${r.status==='cov'?'cov':r.status==='part'?'part':r.status==='na'?'na':'none'})">${r.cd.code}</span>`).join(' ')}</td><td>${tag(a.status)}</td>${I.as.some(x=>x.map)?`<td class="small">${a.map?`<b>${a.map.v||'not marked'}</b> <span class="muted">(sentence ${a.map.n})</span>${a.map.v==='Y'&&a.status==='none'?'<div class="mapflag">⚠ Y on the map, not evident</div>':a.map.v!=='Y'&&a.status==='cov'?'<div class="mapflag">⚠ covered, not marked Y</div>':''}`:'<span class="muted">–</span>'}</td>`:''}</tr>`).join('')}</table></details>`:''}
     <p class="small muted">Each statement is linked to the content descriptions VCAA connects it to in its achievement standard extracts. A statement is covered when all its linked content descriptions are.</p></div>`;
-  // progression
-  let progCard='';
-  if(multi){let last='';const body=[...I.prog].sort((a,b)=>SUBJ.strands.indexOf(a.strand)-SUBJ.strands.indexOf(b.strand)).map(p=>{const head=p.strand!==last?`<tr class="grp"><td colspan="${lv.length+1}">${p.strand}</td></tr>`:'';last=p.strand;
-      return head+`<tr><td class="small"><b>${esc(p.c.label)}</b>${p.breaks.length?` <span class="tag s-none">break</span>`:''}</td>${p.cells.map(x=>x.exp?`<td class="pc ${sym[x.st][0]}" title="${LVNAME(x.l)}: ${sym[x.st][2]}">${sym[x.st][1]}</td>`:`<td class="pc"></td>`).join('')}</tr>`;}).join('');
-    progCard=`<div class="card"><h2>Progression across levels</h2><p class="small muted">Each row is an idea that the curriculum builds over several levels. A coloured cell means the curriculum expects it at that level. A <b>break</b> is a level where it is expected but the plans show no evidence, while other levels teach it.</p>
-     <div class="tiles"><div class="tile none"><div class="big">${I.breaks.length}</div><div class="lab">ideas with a break in their progression</div></div><div class="tile cov"><div class="big">${I.prog.length-I.breaks.length}</div><div class="lab">ideas taught at every level that expects them (or not yet at any)</div></div></div>
-     ${I.breaks.length?`<h3>Breaks to look at first</h3>${I.breaks.slice(0,40).map(p=>`<div class="gap"><div class="h">${esc(p.c.label)} <span class="small muted">no evidence at ${p.breaks.map(LVNAME).join(', ')}</span></div><div class="lookfor"><b>Look for:</b> ${esc(p.c.hint)}</div></div>`).join('')}`:''}
-     <details style="margin-top:10px" ${I.prog.length<=45?'open':''}><summary>Show the full progression grid</summary><div style="overflow:auto"><table class="prog"><tr><th>Idea</th>${lv.map(l=>`<th class="pc">${l==='F'?'F':l.replace('-','–')}</th>`).join('')}</tr>${body}</table></div>
-     <div class="small muted" style="margin-top:6px"><span class="pc c">●</span> clear evidence &nbsp; <span class="pc p">◐</span> some &nbsp; <span class="pc n">✕</span> expected, no evidence &nbsp; <span class="pc x">?</span> no files for this level &nbsp; blank = not expected at this level</div></details></div>`;
+  // progression: each sub-strand across the levels, from the content description statuses
+  let progCard='';const SUBW=SUBJ.cds.some(c=>c.substrand&&c.substrand!==c.strand)?'sub-strand':'strand';
+  if(multi){const cls=x=>x.st==='strong'?'c':x.st==='some'?'p':x.st==='none'?'n':'x';
+    let last='';const body=[...I.prog].sort((a,b)=>SUBJ.strands.indexOf(a.strand)-SUBJ.strands.indexOf(b.strand)).map(p=>{const head=p.strand!==last&&p.c.label!==p.strand?`<tr class="grp"><td colspan="${lv.length+1}">${p.strand}</td></tr>`:'';last=p.strand;
+      return head+`<tr><td class="small"><b>${esc(p.c.label)}</b>${p.breaks.length?` <span class="tag s-none">break</span>`:''}</td>${p.cells.map(x=>x.exp?`<td class="pc ${cls(x)}"><button class="pcb" data-pg="${esc(p.c.label)}|${x.l}" title="${LVNAME(x.l)}: ${x.st==='nofile'?'no files for this level':x.cov+' of '+x.n+' covered'+(x.part?', '+x.part+' partly':'')}">${x.st==='nofile'?'?':x.cov+'/'+x.n}</button></td>`:`<td class="pc"></td>`).join('')}</tr>`;}).join('');
+    progCard=`<div class="card"><h2>Progression across levels</h2><p class="small muted">Each row is a ${SUBW}; each cell shows how many of that level’s content descriptions in it are covered (the same results as the Content descriptions tab). Click a cell to see them. A <b>break</b> is a level where none of them are evident while other levels teach the ${SUBW}.</p>
+     ${I.breaks.length?`<div class="warn"><b>Breaks:</b> ${I.breaks.map(p=>esc(p.c.label)+' at '+p.breaks.map(LVNAME).join(', ')).join('; ')}.</div>`:`<p class="ok">No breaks between levels.</p>`}${(()=>{const z=I.prog.filter(p=>p.cells.every(x=>!x.exp||x.st==='none'||x.st==='nofile')&&p.cells.some(x=>x.st==='none'));return z.length?`<div class="warn"><b>Not evident at any level:</b> ${z.map(p=>esc(p.c.label)).join(', ')}.</div>`:'';})()}
+     <div style="overflow:auto"><table class="prog"><tr><th>${SUBW==='sub-strand'?'Sub-strand':'Strand'}</th>${lv.map(l=>`<th class="pc">${l==='F'?'F':l.replace('-','–')}</th>`).join('')}</tr>${body}</table></div>
+     <div id="pgOut"></div>
+     <div class="small muted" style="margin-top:6px"><span class="pc c">3/3</span> all covered &nbsp; <span class="pc p">1/3</span> some covered or partly &nbsp; <span class="pc n">0/3</span> none evident &nbsp; <span class="pc x">?</span> no files for this level &nbsp; blank = no content at this level</div></div>`;
   }
+  // foundations for the gaps (Maths)
+  let foundCard='';
+  if(I.found.length){const grp=(k,t,help)=>{const l=I.found.filter(f=>f.kind===k);return l.length?`<h3>${t} <span class="small muted">(${l.length})</span></h3><p class="small muted">${help}</p>${l.map(f=>`<div class="gap"><div class="h"><span class="code">${f.r.cd.code}</span> ${esc(f.r.cd.description)} ${tag(f.r.status)}</div><div class="lookfor"><b>Builds on:</b> ${f.ps.map(x=>`<span class="code">${x.c}</span> ${esc(x.cd?x.cd.description:'')} ${x.r?tag(x.r.status):'<span class="muted">(not in this audit)</span>'}`).join('<br>')}</div></div>`).join('')}`:'';};
+    foundCard=`<div class="card"><h2>Foundations for the gaps</h2><p class="small muted">Each gap beside the content description it builds on at the level below, from a fixed map of how the Mathematics content descriptions follow on from each other. Plan first for the gaps whose lead-in is also missing.</p>
+     <div class="tiles"><div class="tile none"><div class="big">${I.found.filter(f=>f.kind==='shaky').length}</div><div class="lab">gaps whose lead-in is also not evident</div></div><div class="tile part"><div class="big">${I.found.filter(f=>f.kind==='partly').length}</div><div class="lab">gaps whose lead-in is partly covered</div></div><div class="tile cov"><div class="big">${I.found.filter(f=>f.kind==='ready').length}</div><div class="lab">gaps with the lead-in covered</div></div></div>
+     ${grp('shaky','Lead-in also missing','Plan the earlier content first, or teach both together.')}
+     <details><summary>The other gaps: lead-in partly covered, covered, or below this audit's levels</summary>${grp('partly','Lead-in partly covered','Check the lead-in is taught well enough to build on.')}${grp('ready','Lead-in covered','Students should have the foundation.')}${grp('out','Lead-in not in this audit','The level below isn’t in this audit. Add it to check.')}</details></div>`;}
+  // check these first: covered on little evidence
+  const checkCard=`<div class="card"><h2>Check these first</h2><p class="small muted">Content descriptions marked covered on the plan’s words alone, with one or two mentions or weak evidence: no code, no map tick and nothing set by you. Open their evidence before relying on them.</p>
+    ${I.check.length?`<details ${I.check.length<=12?'open':''}><summary>Show them (${I.check.length})</summary><table><tr><th>Code</th><th>Content description</th><th>Evidence</th></tr>${I.check.map(r=>`<tr><td><span class="code">${r.cd.code}</span></td><td class="small">${esc(r.cd.description)}</td><td class="small">${r.mentions} mention${r.mentions===1?'':'s'}; ${esc(conf(r))}</td></tr>`).join('')}</table></details>`:'<p class="ok">None: every covered content description has a code, a map tick or several clear mentions.</p>'}</div>`;
   // when in the year
   const termCard=`<div class="card"><h2>When in the year</h2>${I.termStrand?`<p class="small muted">Which term each content description shows up in. The tool reads “Term 1” to “Term 4” or “Semester 1” and “Semester 2” from headings, rows, the top of a table (terms across the weeks), sheet names and file names; a semester counts for both its terms (${Math.round(I.termShare*100)}% of your plan has a term).</p>
     <table><tr><th>Strand</th><th class="right">Term 1</th><th class="right">Term 2</th><th class="right">Term 3</th><th class="right">Term 4</th></tr>${I.termStrand.filter(x=>x.n).map(x=>`<tr><td><b>${x.s}</b> <span class="small muted">${x.n} content descriptions</span></td>${x.t.map(n=>`<td class="right">${n?n:'<span class="tag s-none">0</span>'}</td>`).join('')}</tr>`).join('')}</table>
@@ -171,9 +186,12 @@ function vInsights(){
     <div class="tiles"><div class="tile nav"><div class="big">${C.was} → ${C.now}</div><div class="lab">covered then and now</div></div><div class="tile cov"><div class="big">${C.up.length}</div><div class="lab">improved</div></div><div class="tile none"><div class="big">${C.down.length}</div><div class="lab">gone backwards</div></div></div>
     <table><tr><th>Strand</th><th class="right">Covered then</th><th class="right">Covered now</th></tr>${SUBJ.strands.map(s=>{const rs=C.both.filter(r=>r.cd.strand===s);return rs.length?`<tr><td>${s}</td><td class="right">${rs.filter(r=>CMP.map[r.cd.code]==='cov').length}</td><td class="right">${rs.filter(r=>r.status==='cov').length}</td></tr>`:'';}).join('')}</table>
     ${[['Improved',C.up],['Gone backwards',C.down]].map(([t,l])=>l.length?`<h3>${t}</h3>${l.map(r=>`<div class="small" style="margin-top:4px"><span class="code">${r.cd.code}</span> ${esc(r.cd.description)} <span class="tag s-${CMP.map[r.cd.code]}">${STATUS[CMP.map[r.cd.code]]}</span> → ${tag(r.status)}</div>`).join('')}`:'').join('')}`:''}</div>`;
-  return `<div class="note">These views look across the whole audit. They rest on the same word matching as the rest of the tool, so use them to decide where to look, then check the plans.</div>${progCard}${asCard}${termCard}${emphCard}${repCard}${cmpCard}`;
+  return `<div class="note">These views look across the whole audit. They rest on the same word matching as the rest of the tool, so use them to decide where to look, then check the plans.</div>${I.termStrand?termCard:''}${foundCard}${checkCard}${asCard}${progCard}${I.termStrand?'':termCard}${emphCard}${repCard}${cmpCard}`;
 }
 bind.insights=()=>{
+  $$('[data-pg]').forEach(b=>b.onclick=()=>{const [k,l]=b.dataset.pg.split('|');const p=insights().prog.find(x=>x.c.label===k);const x=p&&p.cells.find(c=>c.l===l);if(!x||!x.rs)return;
+    $('#pgOut').innerHTML=`<div class="gap" style="margin-top:10px"><div class="h">${esc(k)}, ${LVNAME(l)} <button class="link" id="pgClose">close</button></div>${x.rs.map(r=>`<div class="small" style="margin-top:4px"><span class="code">${r.cd.code}</span> ${esc(r.cd.description)} ${tag(r.status)}</div>`).join('')}</div>`;
+    $('#pgClose').onclick=()=>{$('#pgOut').innerHTML='';};});
   $('#cmpPick').onclick=()=>$('#cmpIn').click();
   $('#cmpIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j.vlpAudit)throw 0;
       if((j.state.subject||'english')!==SUBJ.key){toast('That audit is for '+(SUBJECTS[j.state.subject||'english'].name)+'. Switch subject to compare it.');return;}

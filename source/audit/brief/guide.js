@@ -131,9 +131,11 @@ add(H2('6. Check the evidence'),
 
 add(H2('7. Look across the whole audit (Insights)'),
   table(['View', 'Use it to'], [
-    ['Progression across levels', 'Spot a **break**: a level where an idea is expected but not evident while other levels teach it'],
+    ['When in the year', 'See which term each content description is taught, and content left to Term 4. Reads Term 1 to Term 4 or Semester 1 and 2 from headings, the top of a table, columns, sheet names or file names'],
+    ['Foundations for the gaps (Maths)', 'See each gap beside the content description it builds on at the level below; plan first for gaps whose lead-in is also missing'],
+    ['Check these first', 'Find content counted as covered on the plan\'s words alone with little evidence, and check it before relying on it'],
     ['Achievement standards', 'See each achievement standard statement with the content descriptions VCAA links to it, and its status (and the map\'s marks, if a map was uploaded)'],
-    ['When in the year', 'See which term each content description is taught, and content left to Term 4. Needs "Term 1" to "Term 4" in headings, sheet names or file names'],
+    ['Progression across levels', 'For each strand or sub-strand, how many of each level\'s content descriptions are covered (click a cell to see them), and any **break**: a level with none evident while other levels have some'],
     ['Emphasis and thin coverage', 'Compare each strand\'s share of your plans with its share of the curriculum'],
     ['Repeated across levels', 'Find texts or unit titles used at more than one level'],
     ['Compare with a saved audit', 'See what has improved or gone backwards since an earlier audit']], [1, 2.6]));

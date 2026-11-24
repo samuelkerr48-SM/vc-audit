@@ -138,13 +138,15 @@ add(figure('keywords.png', 15, 'Science: key words from the VCAA wording and ela
 add(H2('Insights'),
   P('The **Insights** tab looks across the whole audit. Use it to decide where to look, then check the plans.', { keepNext: true }),
   table(['View', 'What it shows'], [
-    ['Progression across levels', 'Each idea (or sub-strand) the curriculum builds over several levels, and any **break**: a level where it is expected but not evident while other levels teach it'],
+    ['When in the year', 'Which term each content description appears in, strands not revisited, and content left to Term 4. Reads Term 1 to Term 4 or Semester 1 and 2 from headings, the top of a table, a column, sheet names or file names'],
+    ['Foundations for the gaps', 'Mathematics: each gap beside the content description it builds on at the level below (a fixed map of how the Maths content descriptions follow on), with the gaps whose lead-in is also missing first'],
+    ['Check these first', 'Content counted as covered on the plan\'s words alone, with one or two mentions or weak evidence: no code, no map tick, nothing set by you'],
     ['Achievement standards', 'Every achievement standard statement, linked to the content descriptions VCAA connects it to, with a status from them (and the curriculum area map\'s Y/N where a map was uploaded)'],
-    ['When in the year', 'Which term each content description appears in, strands not revisited, and content left to Term 4. Needs "Term 1" to "Term 4" in headings, a column, sheet names or file names'],
+    ['Progression across levels', 'Each strand or sub-strand across the levels: how many of each level\'s content descriptions are covered, the same results as the Content descriptions tab (click a cell to list them), and any **break**: a level with none evident while other levels have some'],
     ['Emphasis and thin coverage', 'Each strand\'s share of your plans beside its share of the curriculum, and content counted as covered on only one or two mentions'],
     ['Repeated across levels', 'Texts or unit titles that appear at more than one level'],
     ['Compare with a saved audit', 'What has improved or gone backwards since an earlier audit']], [1, 2.8]),
-  figure('progression.png', 15, 'Progression across levels in a Science audit of Levels 3 and 4 and Levels 5 and 6'));
+  figure('g_found.png', 15, 'Foundations for the gaps: a Level 3 and 4 Maths audit'));
 
 add(H2('Your school\'s settings'), bullets([
   '**Our school\'s words:** under **Show evidence**, add the name your school uses for a program, routine or unit (for example *Spelling Mastery*). It counts as evidence for that content description from then on. Manage the list in **Settings**.',
