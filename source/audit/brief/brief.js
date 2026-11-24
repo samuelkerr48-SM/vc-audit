@@ -60,7 +60,7 @@ add(H2('What the tool is'),
     ['Evidence', 'The lines in your documents that matched each content description, so every status can be checked'],
     ['Gaps', 'Missing content descriptions, grouped by sub-strand (or by level for a whole school), each with a **Look for** hint'],
     ['Texts, practices and routines', 'English: text types, genres, themes, skills and text diversity (including texts by Aboriginal and Torres Strait Islander authors). Maths: mathematical practices, explicit teaching and assessment routines, representations and contexts'],
-    ['Insights', 'Progression across levels, achievement standards, when in the year, emphasis and thin coverage, and repeats across levels'],
+    ['Insights', 'Progression across levels, achievement standards, when in the year, foundations for the gaps, check these first, and repeats across levels'],
     ['Report', 'A Word report (A4 landscape) or a PDF, a gap action plan in Excel, and one-page team summaries in Word, ready for a PLC, curriculum leader or school review']], [1, 2.8]),
   callout('The tool reads words, not intent. It is a starting point for a professional conversation about the curriculum, not a judgement on a team\'s teaching. Check the evidence before acting on any gap.'));
 
@@ -143,7 +143,6 @@ add(H2('Insights'),
     ['Check these first', 'Content counted as covered on the plan\'s words alone, with one or two mentions or weak evidence: no code, no map tick, nothing set by you'],
     ['Achievement standards', 'Every achievement standard statement, linked to the content descriptions VCAA connects it to, with a status from them (and the curriculum area map\'s Y/N where a map was uploaded)'],
     ['Progression across levels', 'Each strand or sub-strand across the levels: how many of each level\'s content descriptions are covered, the same results as the Content descriptions tab (click a cell to list them), and any **break**: a level with none evident while other levels have some'],
-    ['Emphasis and thin coverage', 'Each strand\'s share of your plans beside its share of the curriculum, and content counted as covered on only one or two mentions'],
     ['Repeated across levels', 'Texts or unit titles that appear at more than one level'],
     ['Compare with a saved audit', 'What has improved or gone backwards since an earlier audit']], [1, 2.8]),
   figure('g_found.png', 15, 'Foundations for the gaps: a Level 3 and 4 Maths audit'));

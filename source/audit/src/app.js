@@ -728,7 +728,6 @@ function vHelp(){return `<div class="card help"><h2>How to use the Curriculum Au
  <h3>4. Insights</h3><ul><li><b>Progression across levels</b> (two or more levels): each idea the curriculum builds over several levels, and any level where it is expected but not evident.</li>
  <li><b>Achievement standards:</b> each statement (from VCAA’s achievement standard extracts) with the content descriptions VCAA links to it, taking its status from them. Every learning area and level.</li>
  <li><b>When in the year:</b> the term each content description appears in, strands not revisited, and content left to Term 4. Needs “Term 1” to “Term 4” in headings, a column, sheet names or file names.</li>
- <li><b>Emphasis and thin coverage:</b> each strand’s share of your plans beside its share of the curriculum, and content that counts as covered on only one or two mentions.</li>
  <li><b>Repeated across levels:</b> texts or unit titles that appear at more than one level.</li>
  <li><b>Compare with a saved audit:</b> what has improved or gone backwards since an earlier audit.</li>
  <li style="list-style:none;margin-left:-20px"></li></ul>

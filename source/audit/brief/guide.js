@@ -136,7 +136,6 @@ add(H2('7. Look across the whole audit (Insights)'),
     ['Check these first', 'Find content counted as covered on the plan\'s words alone with little evidence, and check it before relying on it'],
     ['Achievement standards', 'See each achievement standard statement with the content descriptions VCAA links to it, and its status (and the map\'s marks, if a map was uploaded)'],
     ['Progression across levels', 'For each strand or sub-strand, how many of each level\'s content descriptions are covered (click a cell to see them), and any **break**: a level with none evident while other levels have some'],
-    ['Emphasis and thin coverage', 'Compare each strand\'s share of your plans with its share of the curriculum'],
     ['Repeated across levels', 'Find texts or unit titles used at more than one level'],
     ['Compare with a saved audit', 'See what has improved or gone backwards since an earlier audit']], [1, 2.6]));
 
