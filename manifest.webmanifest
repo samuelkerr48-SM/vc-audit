@@ -4,7 +4,7 @@
  "description": "Audit plans and curriculum area maps against Victorian Curriculum 2.0, and build a curriculum area map from your plans.",
  "start_url": "./",
  "scope": "./",
- "id": "./",
+ "id": "/vc-audit/",
  "display": "standalone",
  "background_color": "#ffffff",
  "theme_color": "#1F1646",
